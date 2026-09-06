@@ -11,6 +11,18 @@ export interface ResourceNode {
   position: THREE.Vector3;
 }
 
+const textureLoader = new THREE.TextureLoader();
+const rockDiffuse = textureLoader.load("/textures/rock/diff.jpg");
+const rockNormal = textureLoader.load("/textures/rock/nor.jpg");
+const rockRoughness = textureLoader.load("/textures/rock/rough.jpg");
+rockDiffuse.colorSpace = THREE.SRGBColorSpace;
+const rockMaterial = new THREE.MeshStandardMaterial({
+  map: rockDiffuse,
+  normalMap: rockNormal,
+  roughnessMap: rockRoughness,
+  roughness: 1,
+});
+
 function createTree(): THREE.Object3D {
   const group = new THREE.Group();
   const scale = 0.85 + Math.random() * 0.4;
@@ -57,9 +69,7 @@ function createRock(): THREE.Object3D {
   }
   geometry.computeVertexNormals();
 
-  const shade = 0.5 + Math.random() * 0.15;
-  const color = new THREE.Color(0x847c6e).offsetHSL(0, 0, shade - 0.55);
-  const rock = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color, roughness: 1, flatShading: true }));
+  const rock = new THREE.Mesh(geometry, rockMaterial);
   rock.scale.set(1 + Math.random() * 0.4, 0.55 + Math.random() * 0.3, 1 + Math.random() * 0.4);
   rock.rotation.y = Math.random() * Math.PI * 2;
   rock.castShadow = true;

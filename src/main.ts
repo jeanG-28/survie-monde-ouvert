@@ -11,7 +11,6 @@ import { createSky } from "./sky";
 
 // --- Scène / rendu ---
 const scene = new THREE.Scene();
-const { setSunPosition } = createSky(scene);
 
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 300);
 
@@ -24,15 +23,16 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 document.getElementById("app")!.prepend(renderer.domElement);
 
+createSky(scene, renderer);
+
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
-// --- Lumières ---
-scene.add(new THREE.HemisphereLight(0xbfd9ff, 0x4a3f2c, 0.6));
-const sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
+// --- Lumières (le ciel HDRI fournit déjà l'éclairage d'ambiance ; le soleil directionnel sert aux ombres) ---
+const sun = new THREE.DirectionalLight(0xfff1d6, 1.4);
 sun.position.set(60, 90, 30);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -44,7 +44,6 @@ sun.shadow.camera.far = 180;
 sun.shadow.bias = -0.0015;
 scene.add(sun);
 scene.add(sun.target);
-setSunPosition(sun.position);
 
 // --- Monde ---
 const terrain = createTerrain();
