@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { getHeightAt, getBiomeAt, TERRAIN_SIZE } from "./terrain";
+import { getHeightAt, getBiomeAt, isUnderwater, TERRAIN_SIZE } from "./terrain";
 
 const BLADE_COUNT = 35000;
 const BLADE_HEIGHT = 0.28;
@@ -107,6 +107,7 @@ export function createGrass(scene: THREE.Scene): { update: (time: number) => voi
     const h = getHeightAt(x, z);
     const t = getBiomeAt(h);
     if (t < 0.12 || t > 0.72) continue; // évite le sable et la roche
+    if (isUnderwater(x, z)) continue;
 
     dummy.position.set(x, h, z);
     dummy.rotation.y = Math.random() * Math.PI * 2;

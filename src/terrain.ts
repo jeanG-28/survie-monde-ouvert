@@ -6,13 +6,31 @@ const HEIGHT_SCALE = 7;
 const NOISE_SCALE = 0.025;
 const TEXTURE_REPEAT = 26;
 
-/** Hauteur du terrain à une position (x, z) donnée — utilisée à la fois pour le maillage et pour poser joueur/objets au sol. */
-export function getHeightAt(x: number, z: number): number {
+export const POND_CENTER = new THREE.Vector2(35, -30);
+export const POND_RADIUS = 15;
+const POND_FLOOR = -3.6;
+export const WATER_LEVEL = -2.1;
+
+function baseHeightAt(x: number, z: number): number {
   // Un bruit basse fréquence "déforme" les coordonnées d'un second bruit,
   // ce qui casse la régularité visuelle d'un simple bruit fractal (relief plus naturel).
   const warpX = fractalNoise(x * 0.01, z * 0.01, 2) * 12;
   const warpZ = fractalNoise(x * 0.01 + 50, z * 0.01 + 50, 2) * 12;
   return fractalNoise((x + warpX) * NOISE_SCALE, (z + warpZ) * NOISE_SCALE, 5) * HEIGHT_SCALE;
+}
+
+/** Hauteur du terrain à une position (x, z) donnée — utilisée à la fois pour le maillage et pour poser joueur/objets au sol. */
+export function getHeightAt(x: number, z: number): number {
+  const h = baseHeightAt(x, z);
+  const dist = Math.hypot(x - POND_CENTER.x, z - POND_CENTER.y);
+  if (dist >= POND_RADIUS) return h;
+  const basin = THREE.MathUtils.smoothstep(1 - dist / POND_RADIUS, 0, 1);
+  return THREE.MathUtils.lerp(h, POND_FLOOR, basin);
+}
+
+/** true si (x, z) est sous la surface de l'eau — sert à éviter d'y faire pousser arbres/herbe. */
+export function isUnderwater(x: number, z: number): boolean {
+  return getHeightAt(x, z) < WATER_LEVEL + 0.15;
 }
 
 /** Retourne t (0=sable, 0.5=herbe, 1=roche) pour une hauteur donnée — même formule que le shader du terrain. */

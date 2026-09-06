@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { getHeightAt, TERRAIN_SIZE } from "./terrain";
+import { getHeightAt, isUnderwater, TERRAIN_SIZE } from "./terrain";
 import type { ResourceType } from "./inventory";
 
 export interface ResourceNode {
@@ -23,16 +23,28 @@ const rockMaterial = new THREE.MeshStandardMaterial({
   roughness: 1,
 });
 
+function loadTiledTexture(url: string, repeatX: number, repeatY: number, srgb: boolean): THREE.Texture {
+  const tex = textureLoader.load(url);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeatX, repeatY);
+  if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const barkMaterial = new THREE.MeshStandardMaterial({
+  map: loadTiledTexture("/textures/bark/diff.jpg", 2, 1, true),
+  normalMap: loadTiledTexture("/textures/bark/nor.jpg", 2, 1, false),
+  roughnessMap: loadTiledTexture("/textures/bark/rough.jpg", 2, 1, false),
+  roughness: 1,
+});
+
 function createTree(): THREE.Object3D {
   const group = new THREE.Group();
   const scale = 0.85 + Math.random() * 0.4;
   const trunkHeight = 1.5 + Math.random() * 0.6;
 
-  const barkColor = new THREE.Color(0x5c3e26).offsetHSL(0, 0, (Math.random() - 0.5) * 0.08);
-  const trunk = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.13, 0.24, trunkHeight, 7),
-    new THREE.MeshStandardMaterial({ color: barkColor, roughness: 0.95 }),
-  );
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.24, trunkHeight, 7), barkMaterial);
   trunk.position.y = trunkHeight / 2;
   group.add(trunk);
 
@@ -90,8 +102,12 @@ export class ResourceWorld {
 
   private randomGroundPoint(): THREE.Vector3 {
     const margin = 8;
-    const x = (Math.random() - 0.5) * (TERRAIN_SIZE - margin * 2);
-    const z = (Math.random() - 0.5) * (TERRAIN_SIZE - margin * 2);
+    let x = 0;
+    let z = 0;
+    do {
+      x = (Math.random() - 0.5) * (TERRAIN_SIZE - margin * 2);
+      z = (Math.random() - 0.5) * (TERRAIN_SIZE - margin * 2);
+    } while (isUnderwater(x, z));
     return new THREE.Vector3(x, getHeightAt(x, z), z);
   }
 

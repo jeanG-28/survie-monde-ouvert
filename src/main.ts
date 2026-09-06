@@ -10,6 +10,7 @@ import { createHeldItemMesh } from "./items";
 import { createSky } from "./sky";
 import { createComposer } from "./postprocessing";
 import { createGrass } from "./grass";
+import { createPond } from "./water";
 
 // --- Scène / rendu ---
 const scene = new THREE.Scene();
@@ -38,16 +39,20 @@ window.addEventListener("resize", () => {
 });
 
 // --- Lumières (le ciel HDRI fournit déjà l'éclairage d'ambiance ; le soleil directionnel sert aux ombres) ---
+const SUN_OFFSET = new THREE.Vector3(35, 55, 20);
 const sun = new THREE.DirectionalLight(0xfff1d6, 1.4);
-sun.position.set(60, 90, 30);
+sun.position.copy(SUN_OFFSET);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -60;
-sun.shadow.camera.right = 60;
-sun.shadow.camera.top = 60;
-sun.shadow.camera.bottom = -60;
-sun.shadow.camera.far = 180;
+// Frustum resserré autour du joueur (au lieu de couvrir tout le terrain) : ombres bien plus nettes.
+sun.shadow.camera.left = -25;
+sun.shadow.camera.right = 25;
+sun.shadow.camera.top = 25;
+sun.shadow.camera.bottom = -25;
+sun.shadow.camera.near = 10;
+sun.shadow.camera.far = 130;
 sun.shadow.bias = -0.0015;
+sun.shadow.normalBias = 0.02;
 scene.add(sun);
 scene.add(sun.target);
 
@@ -56,6 +61,7 @@ const terrain = createTerrain();
 scene.add(terrain);
 
 const grass = createGrass(scene);
+const pond = createPond(scene);
 
 const resourceWorld = new ResourceWorld(scene);
 
@@ -209,7 +215,8 @@ function updateCamera() {
   camera.position.y = Math.max(camera.position.y, getHeightAt(camera.position.x, camera.position.z) + 0.3);
   camera.lookAt(target);
 
-  sun.target.position.copy(target);
+  sun.target.position.copy(player.position);
+  sun.position.copy(player.position).add(SUN_OFFSET);
 }
 
 function updateInteractionPrompt() {
@@ -235,8 +242,13 @@ function animate() {
   updateCamera();
   resourceWorld.update(now);
   grass.update(now);
+  pond.update(dt);
   updateInteractionPrompt();
   updateBuildIndicator();
+
+  // Rotation très lente du ciel : nuages qui dérivent doucement, sensation de temps qui passe.
+  scene.backgroundRotation.y += dt * 0.006;
+  scene.environmentRotation.y = scene.backgroundRotation.y;
 
   composer.render();
 }
