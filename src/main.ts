@@ -7,17 +7,21 @@ import type { ItemId } from "./inventory";
 import { BuildingSystem } from "./building";
 import { UI } from "./ui";
 import { createHeldItemMesh } from "./items";
+import { createSky } from "./sky";
 
 // --- Scène / rendu ---
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87ceeb);
-scene.fog = new THREE.Fog(0x87ceeb, 40, 110);
+const { setSunPosition } = createSky(scene);
 
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 300);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
 document.getElementById("app")!.prepend(renderer.domElement);
 
 window.addEventListener("resize", () => {
@@ -27,17 +31,20 @@ window.addEventListener("resize", () => {
 });
 
 // --- Lumières ---
-scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-const sun = new THREE.DirectionalLight(0xfff4e0, 1.2);
-sun.position.set(40, 60, 20);
+scene.add(new THREE.HemisphereLight(0xbfd9ff, 0x4a3f2c, 0.6));
+const sun = new THREE.DirectionalLight(0xfff1d6, 2.2);
+sun.position.set(60, 90, 30);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.left = -60;
 sun.shadow.camera.right = 60;
 sun.shadow.camera.top = 60;
 sun.shadow.camera.bottom = -60;
-sun.shadow.camera.far = 150;
+sun.shadow.camera.far = 180;
+sun.shadow.bias = -0.0015;
 scene.add(sun);
+scene.add(sun.target);
+setSunPosition(sun.position);
 
 // --- Monde ---
 const terrain = createTerrain();
@@ -48,27 +55,26 @@ const resourceWorld = new ResourceWorld(scene);
 const inventory = new Inventory();
 const buildingSystem = new BuildingSystem(scene, inventory);
 
-const player = new Player();
-player.position.set(0, getHeightAt(0, 0), 0);
-scene.add(player.root);
-
-let equippedMesh: THREE.Object3D | null = null;
-function equip(id: ItemId) {
-  if (equippedMesh) player.rightHand.remove(equippedMesh);
-  equippedMesh = createHeldItemMesh(id);
-  player.rightHand.add(equippedMesh);
-  ui.setHeldItem(RECIPES.find((r) => r.id === id)!.label);
-}
-
 const ui = new UI(inventory, (id) => {
   if (inventory.craft(RECIPES.find((r) => r.id === id)!)) {
     equip(id);
   }
 });
 
+let equippedMesh: THREE.Object3D | null = null;
+let player: Player;
+
+function equip(id: ItemId) {
+  if (!player) return;
+  if (equippedMesh) player.rightHand.remove(equippedMesh);
+  equippedMesh = createHeldItemMesh(id);
+  player.rightHand.add(equippedMesh);
+  ui.setHeldItem(RECIPES.find((r) => r.id === id)!.label);
+}
+
 // --- Contrôles caméra / clavier ---
 let yaw = 0;
-let pitch = 0.35;
+let pitch = 0.25;
 const PITCH_MIN = -0.3;
 const PITCH_MAX = 1.2;
 const CAMERA_DISTANCE = 5.5;
@@ -117,7 +123,7 @@ document.addEventListener("keydown", (e) => {
     tryGather();
   } else if (e.code === "Space") {
     e.preventDefault();
-    if (player.onGround) player.velocityY = 5.2;
+    if (player?.onGround) player.velocityY = 5.2;
   } else if (e.code === "Escape") {
     ui.closeCraftMenu();
   }
@@ -125,12 +131,8 @@ document.addEventListener("keydown", (e) => {
 
 document.addEventListener("keyup", (e) => keys.delete(e.code));
 
-ui.onStart(() => {
-  ui.hideInstructions();
-  canvas.requestPointerLock();
-});
-
 function tryGather() {
+  if (!player) return;
   const node = resourceWorld.findNearby(player.position);
   if (!node) return;
   const destroyed = resourceWorld.hit(node);
@@ -172,6 +174,7 @@ function updatePlayer(dt: number) {
     player.yaw = Math.atan2(move.x, move.z);
   }
   player.animateWalk(isMoving, dt);
+  player.update(dt);
 
   // Gravité + collision avec le sol.
   player.velocityY += GRAVITY * dt;
@@ -198,6 +201,8 @@ function updateCamera() {
   camera.position.copy(target).add(offset);
   camera.position.y = Math.max(camera.position.y, getHeightAt(camera.position.x, camera.position.z) + 0.3);
   camera.lookAt(target);
+
+  sun.target.position.copy(target);
 }
 
 function updateInteractionPrompt() {
@@ -227,4 +232,19 @@ function animate() {
 
   renderer.render(scene, camera);
 }
-animate();
+
+async function main() {
+  player = await Player.load();
+  player.position.set(0, getHeightAt(0, 0), 0);
+  scene.add(player.root);
+
+  ui.setLoading(false);
+  ui.onStart(() => {
+    ui.hideInstructions();
+    canvas.requestPointerLock();
+  });
+
+  animate();
+}
+
+main();

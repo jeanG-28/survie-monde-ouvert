@@ -10,6 +10,8 @@ export class UI {
   private craftMenuEl = document.getElementById("craft-menu")!;
   private recipeListEl = document.getElementById("recipe-list")!;
   private instructionsEl = document.getElementById("instructions")!;
+  private loadingStatusEl = document.getElementById("loading-status")!;
+  private startHintEl = document.getElementById("start-hint")!;
   private inventory: Inventory;
   private onCraft: (id: ItemId) => void;
 
@@ -86,6 +88,11 @@ export class UI {
 
   isCraftMenuOpen(): boolean {
     return this.craftMenuEl.style.display === "block";
+  }
+
+  setLoading(isLoading: boolean) {
+    this.loadingStatusEl.style.display = isLoading ? "block" : "none";
+    this.startHintEl.style.display = isLoading ? "none" : "block";
   }
 
   hideInstructions() {

@@ -1,111 +1,96 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-const SKIN = 0xd8a878;
-const SHIRT = 0x3b5f8a;
-const PANTS = 0x33322e;
+const MODEL_URL = "/models/CesiumMan.glb";
+const TARGET_HEIGHT = 1.8;
 
-/** Construit un personnage aux proportions humaines réalistes à partir de primitives. */
-function buildHumanoid(): { group: THREE.Group; rightHand: THREE.Object3D; leftLeg: THREE.Object3D; rightLeg: THREE.Object3D } {
-  const group = new THREE.Group();
-
-  const skinMat = new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.8 });
-  const shirtMat = new THREE.MeshStandardMaterial({ color: SHIRT, roughness: 0.9 });
-  const pantsMat = new THREE.MeshStandardMaterial({ color: PANTS, roughness: 0.9 });
-
-  // Proportions (mètres), hauteur totale ~1.8m, hanche = origine du groupe (y=0).
-  const hipY = 0.9;
-  const torsoHeight = 0.55;
-  const headRadius = 0.13;
-
-  // Torse (capsule) : du bassin aux épaules.
-  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.19, torsoHeight - 0.38, 4, 8), shirtMat);
-  torso.position.y = hipY + torsoHeight / 2;
-  group.add(torso);
-
-  // Bassin.
-  const pelvis = new THREE.Mesh(new THREE.CapsuleGeometry(0.18, 0.05, 4, 8), pantsMat);
-  pelvis.position.y = hipY;
-  group.add(pelvis);
-
-  // Tête + cou.
-  const head = new THREE.Mesh(new THREE.SphereGeometry(headRadius, 16, 16), skinMat);
-  head.position.y = hipY + torsoHeight + headRadius + 0.05;
-  group.add(head);
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.1, 8), skinMat);
-  neck.position.y = hipY + torsoHeight + 0.05;
-  group.add(neck);
-
-  // Bras (épaule -> main), un pivot par épaule pour pouvoir animer/attacher un objet en main.
-  function buildArm(side: 1 | -1): { pivot: THREE.Group; hand: THREE.Object3D } {
-    const pivot = new THREE.Group();
-    pivot.position.set(0.26 * side, hipY + torsoHeight - 0.05, 0);
-    const upperArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.06, 0.28, 4, 8), skinMat);
-    upperArm.position.y = -0.19;
-    pivot.add(upperArm);
-    const hand = new THREE.Object3D();
-    hand.position.y = -0.38;
-    pivot.add(hand);
-    return { pivot, hand };
-  }
-  const leftArm = buildArm(-1);
-  const rightArm = buildArm(1);
-  group.add(leftArm.pivot, rightArm.pivot);
-
-  // Jambes (hanche -> pied), un pivot par hanche pour l'animation de marche.
-  function buildLeg(side: 1 | -1): THREE.Group {
-    const pivot = new THREE.Group();
-    pivot.position.set(0.1 * side, hipY - 0.05, 0);
-    const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.55, 4, 8), pantsMat);
-    leg.position.y = -0.35;
-    pivot.add(leg);
-    return pivot;
-  }
-  const leftLeg = buildLeg(-1);
-  const rightLeg = buildLeg(1);
-  group.add(leftLeg, rightLeg);
-
-  group.traverse((obj) => {
-    if (obj instanceof THREE.Mesh) obj.castShadow = true;
+function findHandBone(root: THREE.Object3D): THREE.Object3D | null {
+  let found: THREE.Object3D | null = null;
+  root.traverse((obj) => {
+    if (found) return;
+    if ((obj as THREE.Bone).isBone && /hand.*r|r.*hand|hand_r|r_hand/i.test(obj.name)) {
+      found = obj;
+    }
   });
-
-  return { group, rightHand: rightArm.hand, leftLeg, rightLeg };
+  if (!found) {
+    // À défaut, on prend n'importe quel os contenant "hand" dans son nom.
+    root.traverse((obj) => {
+      if (found) return;
+      if ((obj as THREE.Bone).isBone && /hand/i.test(obj.name)) found = obj;
+    });
+  }
+  return found;
 }
 
 export class Player {
   readonly root = new THREE.Group();
   readonly rightHand: THREE.Object3D;
-  private readonly leftLeg: THREE.Object3D;
-  private readonly rightLeg: THREE.Object3D;
+  private readonly mixer: THREE.AnimationMixer | null;
+  private readonly walkAction: THREE.AnimationAction | null;
 
   position = new THREE.Vector3(0, 0, 0);
   yaw = 0;
   velocityY = 0;
   onGround = true;
-  readonly height = 1.8;
+  readonly height = TARGET_HEIGHT;
   readonly moveSpeed = 4.2;
 
-  private walkCycle = 0;
-
-  constructor() {
-    const { group, rightHand, leftLeg, rightLeg } = buildHumanoid();
-    this.root.add(group);
-    this.rightHand = rightHand;
-    this.leftLeg = leftLeg;
-    this.rightLeg = rightLeg;
+  private constructor(
+    modelRoot: THREE.Object3D,
+    mixer: THREE.AnimationMixer | null,
+    walkAction: THREE.AnimationAction | null,
+    rightHand: THREE.Object3D | null,
+  ) {
+    this.root.add(modelRoot);
+    this.mixer = mixer;
+    this.walkAction = walkAction;
+    this.rightHand = rightHand ?? this.root;
   }
 
-  /** Anime la marche (balancement des jambes) selon la vitesse de déplacement. */
-  animateWalk(isMoving: boolean, dt: number) {
-    if (isMoving) {
-      this.walkCycle += dt * 8;
-      const swing = Math.sin(this.walkCycle) * 0.5;
-      this.leftLeg.rotation.x = swing;
-      this.rightLeg.rotation.x = -swing;
-    } else {
-      this.walkCycle = 0;
-      this.leftLeg.rotation.x = THREE.MathUtils.lerp(this.leftLeg.rotation.x, 0, dt * 10);
-      this.rightLeg.rotation.x = THREE.MathUtils.lerp(this.rightLeg.rotation.x, 0, dt * 10);
+  static async load(): Promise<Player> {
+    const loader = new GLTFLoader();
+    const gltf = await loader.loadAsync(MODEL_URL);
+    const model = gltf.scene;
+
+    model.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+      }
+    });
+
+    // Le modèle source n'a pas forcément une hauteur de 1.8m : on le redimensionne.
+    const box = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const scale = size.y > 0 ? TARGET_HEIGHT / size.y : 1;
+    model.scale.setScalar(scale);
+
+    // Recale le modèle pour que son origine soit au niveau des pieds (y=0).
+    const box2 = new THREE.Box3().setFromObject(model);
+    model.position.y -= box2.min.y;
+
+    let mixer: THREE.AnimationMixer | null = null;
+    let walkAction: THREE.AnimationAction | null = null;
+    if (gltf.animations.length > 0) {
+      mixer = new THREE.AnimationMixer(model);
+      walkAction = mixer.clipAction(gltf.animations[0]);
+      walkAction.play();
+      walkAction.paused = true;
     }
+
+    const rightHand = findHandBone(model);
+
+    return new Player(model, mixer, walkAction, rightHand);
+  }
+
+  /** Anime la marche via le clip d'animation du modèle, mis en pause à l'arrêt. */
+  animateWalk(isMoving: boolean, _dt: number) {
+    if (this.walkAction) this.walkAction.paused = !isMoving;
+  }
+
+  update(dt: number) {
+    this.mixer?.update(dt);
   }
 
   syncTransform() {

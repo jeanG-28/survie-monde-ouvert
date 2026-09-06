@@ -13,18 +13,32 @@ export interface ResourceNode {
 
 function createTree(): THREE.Object3D {
   const group = new THREE.Group();
+  const scale = 0.85 + Math.random() * 0.4;
+  const trunkHeight = 1.5 + Math.random() * 0.6;
+
+  const barkColor = new THREE.Color(0x5c3e26).offsetHSL(0, 0, (Math.random() - 0.5) * 0.08);
   const trunk = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.15, 0.22, 1.6, 8),
-    new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 1 }),
+    new THREE.CylinderGeometry(0.13, 0.24, trunkHeight, 7),
+    new THREE.MeshStandardMaterial({ color: barkColor, roughness: 0.95 }),
   );
-  trunk.position.y = 0.8;
+  trunk.position.y = trunkHeight / 2;
   group.add(trunk);
-  const leaves = new THREE.Mesh(
-    new THREE.ConeGeometry(1.1, 2.2, 8),
-    new THREE.MeshStandardMaterial({ color: 0x2e5c2a, roughness: 1 }),
-  );
-  leaves.position.y = 2.4;
-  group.add(leaves);
+
+  // Plusieurs étages de feuillage décalés, plus naturel qu'un cône unique.
+  const leafColor = new THREE.Color(0x2e5c2a).offsetHSL((Math.random() - 0.5) * 0.03, 0, (Math.random() - 0.5) * 0.08);
+  const leafMaterial = new THREE.MeshStandardMaterial({ color: leafColor, roughness: 0.9, flatShading: true });
+  const tiers = 3;
+  for (let i = 0; i < tiers; i++) {
+    const t = i / (tiers - 1);
+    const radius = THREE.MathUtils.lerp(1.15, 0.35, t);
+    const height = THREE.MathUtils.lerp(1.3, 0.9, t);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(radius, height, 8), leafMaterial);
+    cone.position.y = trunkHeight + t * 1.3 + height / 2 - 0.2;
+    cone.rotation.y = Math.random() * Math.PI;
+    group.add(cone);
+  }
+
+  group.scale.setScalar(scale);
   group.traverse((o) => {
     if (o instanceof THREE.Mesh) o.castShadow = true;
   });
@@ -32,11 +46,22 @@ function createTree(): THREE.Object3D {
 }
 
 function createRock(): THREE.Object3D {
-  const rock = new THREE.Mesh(
-    new THREE.IcosahedronGeometry(0.55, 0),
-    new THREE.MeshStandardMaterial({ color: 0x8a8378, roughness: 1, flatShading: true }),
-  );
-  rock.scale.set(1, 0.7, 1);
+  const geometry = new THREE.IcosahedronGeometry(0.55, 1);
+  const pos = geometry.attributes.position;
+  // Déplace chaque sommet aléatoirement pour casser la symétrie parfaite de l'icosaèdre.
+  for (let i = 0; i < pos.count; i++) {
+    const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
+    const jitter = 1 + (Math.random() - 0.5) * 0.3;
+    v.multiplyScalar(jitter);
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  geometry.computeVertexNormals();
+
+  const shade = 0.5 + Math.random() * 0.15;
+  const color = new THREE.Color(0x847c6e).offsetHSL(0, 0, shade - 0.55);
+  const rock = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color, roughness: 1, flatShading: true }));
+  rock.scale.set(1 + Math.random() * 0.4, 0.55 + Math.random() * 0.3, 1 + Math.random() * 0.4);
+  rock.rotation.y = Math.random() * Math.PI * 2;
   rock.castShadow = true;
   return rock;
 }
