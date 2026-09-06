@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-const MODEL_URL = "/models/CesiumMan.glb";
+const MODEL_URL = "/models/Soldier.glb";
 const TARGET_HEIGHT = 1.8;
 
 function findHandBone(root: THREE.Object3D): THREE.Object3D | null {
@@ -22,11 +22,17 @@ function findHandBone(root: THREE.Object3D): THREE.Object3D | null {
   return found;
 }
 
+function findClip(animations: THREE.AnimationClip[], name: string): THREE.AnimationClip | null {
+  return animations.find((c) => c.name.toLowerCase() === name.toLowerCase()) ?? null;
+}
+
 export class Player {
   readonly root = new THREE.Group();
   readonly rightHand: THREE.Object3D;
   private readonly mixer: THREE.AnimationMixer | null;
+  private readonly idleAction: THREE.AnimationAction | null;
   private readonly walkAction: THREE.AnimationAction | null;
+  private walkWeight = 0;
 
   position = new THREE.Vector3(0, 0, 0);
   yaw = 0;
@@ -38,11 +44,13 @@ export class Player {
   private constructor(
     modelRoot: THREE.Object3D,
     mixer: THREE.AnimationMixer | null,
+    idleAction: THREE.AnimationAction | null,
     walkAction: THREE.AnimationAction | null,
     rightHand: THREE.Object3D | null,
   ) {
     this.root.add(modelRoot);
     this.mixer = mixer;
+    this.idleAction = idleAction;
     this.walkAction = walkAction;
     this.rightHand = rightHand ?? this.root;
   }
@@ -71,22 +79,36 @@ export class Player {
     model.position.y -= box2.min.y;
 
     let mixer: THREE.AnimationMixer | null = null;
+    let idleAction: THREE.AnimationAction | null = null;
     let walkAction: THREE.AnimationAction | null = null;
-    if (gltf.animations.length > 0) {
+
+    const idleClip = findClip(gltf.animations, "Idle");
+    const walkClip = findClip(gltf.animations, "Walk");
+    if (idleClip || walkClip) {
       mixer = new THREE.AnimationMixer(model);
-      walkAction = mixer.clipAction(gltf.animations[0]);
-      walkAction.play();
-      walkAction.paused = true;
+      if (idleClip) {
+        idleAction = mixer.clipAction(idleClip);
+        idleAction.play();
+      }
+      if (walkClip) {
+        walkAction = mixer.clipAction(walkClip);
+        walkAction.play();
+        walkAction.setEffectiveWeight(0);
+      }
     }
 
     const rightHand = findHandBone(model);
 
-    return new Player(model, mixer, walkAction, rightHand);
+    return new Player(model, mixer, idleAction, walkAction, rightHand);
   }
 
-  /** Anime la marche via le clip d'animation du modèle, mis en pause à l'arrêt. */
-  animateWalk(isMoving: boolean, _dt: number) {
-    if (this.walkAction) this.walkAction.paused = !isMoving;
+  /** Fondu enchaîné progressif entre l'animation d'immobilité et celle de marche. */
+  animateWalk(isMoving: boolean, dt: number) {
+    if (!this.walkAction) return;
+    const target = isMoving ? 1 : 0;
+    this.walkWeight = THREE.MathUtils.damp(this.walkWeight, target, 8, dt);
+    this.walkAction.setEffectiveWeight(this.walkWeight);
+    this.idleAction?.setEffectiveWeight(1 - this.walkWeight);
   }
 
   update(dt: number) {
