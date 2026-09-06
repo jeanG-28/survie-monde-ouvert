@@ -67,6 +67,10 @@ export class Player {
       }
     });
 
+    // Le modèle Soldier.glb regarde par défaut vers l'avant de sa propre base (+Z),
+    // à l'opposé de notre convention de déplacement : on le retourne une fois pour toutes.
+    model.rotation.y = Math.PI;
+
     // Le modèle source n'a pas forcément une hauteur de 1.8m : on le redimensionne.
     const box = new THREE.Box3().setFromObject(model);
     const size = new THREE.Vector3();
