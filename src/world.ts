@@ -53,9 +53,18 @@ function createJitteredBlob(radius: number, detail: number, jitterAmount: number
   return geometry;
 }
 
-function randomLeafMaterial(): THREE.MeshStandardMaterial {
-  const leafColor = new THREE.Color(0x2e5c2a).offsetHSL((Math.random() - 0.5) * 0.04, (Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1);
+function randomLeafMaterial(lightness = 0): THREE.MeshStandardMaterial {
+  const leafColor = new THREE.Color(0x2e5c2a).offsetHSL(
+    (Math.random() - 0.5) * 0.04,
+    (Math.random() - 0.5) * 0.1,
+    (Math.random() - 0.5) * 0.1 + lightness,
+  );
   return new THREE.MeshStandardMaterial({ color: leafColor, roughness: 0.9, flatShading: true });
+}
+
+/** Deux teintes de feuillage (clair/sombre) pour un houppier moucheté plutôt qu'une couleur plate. */
+function createLeafPalette(): [THREE.MeshStandardMaterial, THREE.MeshStandardMaterial] {
+  return [randomLeafMaterial(-0.04), randomLeafMaterial(0.05)];
 }
 
 /** Conifère : plusieurs étages de cônes décalés. */
@@ -67,13 +76,13 @@ function createPineTree(): THREE.Object3D {
   trunk.position.y = trunkHeight / 2;
   group.add(trunk);
 
-  const leafMaterial = randomLeafMaterial();
+  const [leafDark, leafLight] = createLeafPalette();
   const tiers = 4;
   for (let i = 0; i < tiers; i++) {
     const t = i / (tiers - 1);
     const radius = THREE.MathUtils.lerp(1.15, 0.3, t);
     const height = THREE.MathUtils.lerp(1.2, 0.85, t);
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(radius, height, 9), leafMaterial);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(radius, height, 9), i % 2 === 0 ? leafDark : leafLight);
     cone.position.y = trunkHeight + t * 1.05 + height / 2 - 0.2;
     cone.rotation.y = Math.random() * Math.PI;
     cone.castShadow = true;
@@ -91,20 +100,20 @@ function createBroadleafTree(): THREE.Object3D {
   trunk.position.y = trunkHeight / 2;
   group.add(trunk);
 
-  const leafMaterial = randomLeafMaterial();
+  const [leafDark, leafLight] = createLeafPalette();
   const canopyCenter = trunkHeight + 0.6;
   const blobCount = 5 + Math.floor(Math.random() * 3);
   for (let i = 0; i < blobCount; i++) {
     const angle = (i / blobCount) * Math.PI * 2 + Math.random() * 0.6;
     const dist = 0.35 + Math.random() * 0.35;
     const blobRadius = 0.55 + Math.random() * 0.35;
-    const blob = new THREE.Mesh(createJitteredBlob(blobRadius, 1, 0.35), leafMaterial);
+    const blob = new THREE.Mesh(createJitteredBlob(blobRadius, 1, 0.35), Math.random() < 0.5 ? leafDark : leafLight);
     blob.position.set(Math.cos(angle) * dist, canopyCenter + (Math.random() - 0.5) * 0.5, Math.sin(angle) * dist);
     blob.castShadow = true;
     group.add(blob);
   }
   // Touffe centrale pour combler le sommet.
-  const topBlob = new THREE.Mesh(createJitteredBlob(0.7, 1, 0.3), leafMaterial);
+  const topBlob = new THREE.Mesh(createJitteredBlob(0.7, 1, 0.3), leafLight);
   topBlob.position.y = canopyCenter + 0.5;
   topBlob.castShadow = true;
   group.add(topBlob);

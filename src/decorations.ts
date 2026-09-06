@@ -81,6 +81,7 @@ function createLilyPads(scene: THREE.Scene) {
 
 function createBushes(scene: THREE.Scene, terrainSize: number) {
   const material = new THREE.MeshStandardMaterial({ color: 0x3d6b2f, roughness: 0.9, flatShading: true });
+  const berryMaterial = new THREE.MeshStandardMaterial({ color: 0x9c1c3a, roughness: 0.4 });
   const half = terrainSize / 2 - 6;
   let placed = 0;
   let attempts = 0;
@@ -107,6 +108,15 @@ function createBushes(scene: THREE.Scene, terrainSize: number) {
       clump.position.set((Math.random() - 0.5) * 0.3, 0.22 + Math.random() * 0.08, (Math.random() - 0.5) * 0.3);
       clump.castShadow = true;
       group.add(clump);
+
+      if (Math.random() < 0.3) {
+        for (let b = 0; b < 3 + Math.floor(Math.random() * 4); b++) {
+          const berry = new THREE.Mesh(new THREE.SphereGeometry(0.03, 5, 5), berryMaterial);
+          const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+          berry.position.copy(clump.position).addScaledVector(dir, 0.25);
+          group.add(berry);
+        }
+      }
     }
     group.position.set(x, h, z);
     group.rotation.y = Math.random() * Math.PI * 2;
