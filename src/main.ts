@@ -8,14 +8,17 @@ import { BuildingSystem } from "./building";
 import { UI } from "./ui";
 import { createHeldItemMesh } from "./items";
 import { createSky } from "./sky";
+import { createComposer } from "./postprocessing";
+import { createGrass } from "./grass";
 
 // --- Scène / rendu ---
 const scene = new THREE.Scene();
 
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 300);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -25,10 +28,13 @@ document.getElementById("app")!.prepend(renderer.domElement);
 
 createSky(scene, renderer);
 
+const { composer, setSize: setComposerSize } = createComposer(renderer, scene, camera);
+
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  setComposerSize(window.innerWidth, window.innerHeight);
 });
 
 // --- Lumières (le ciel HDRI fournit déjà l'éclairage d'ambiance ; le soleil directionnel sert aux ombres) ---
@@ -48,6 +54,8 @@ scene.add(sun.target);
 // --- Monde ---
 const terrain = createTerrain();
 scene.add(terrain);
+
+const grass = createGrass(scene);
 
 const resourceWorld = new ResourceWorld(scene);
 
@@ -226,10 +234,11 @@ function animate() {
   updatePlayer(dt);
   updateCamera();
   resourceWorld.update(now);
+  grass.update(now);
   updateInteractionPrompt();
   updateBuildIndicator();
 
-  renderer.render(scene, camera);
+  composer.render();
 }
 
 async function main() {

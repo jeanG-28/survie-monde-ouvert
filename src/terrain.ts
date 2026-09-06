@@ -15,17 +15,22 @@ export function getHeightAt(x: number, z: number): number {
   return fractalNoise((x + warpX) * NOISE_SCALE, (z + warpZ) * NOISE_SCALE, 5) * HEIGHT_SCALE;
 }
 
-function loadTiledTexture(loader: THREE.TextureLoader, url: string, srgb: boolean): THREE.Texture {
+/** Retourne t (0=sable, 0.5=herbe, 1=roche) pour une hauteur donnée — même formule que le shader du terrain. */
+export function getBiomeAt(h: number): number {
+  return THREE.MathUtils.clamp((h + HEIGHT_SCALE) / (HEIGHT_SCALE * 2), 0, 1);
+}
+
+function loadTiled(loader: THREE.TextureLoader, url: string, srgb: boolean): THREE.Texture {
   const tex = loader.load(url);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
-  tex.anisotropy = 4;
+  tex.anisotropy = 8;
   if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
 
 export function createTerrain(): THREE.Mesh {
-  const segments = 180;
+  const segments = 220;
   const geometry = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, segments, segments);
   geometry.rotateX(-Math.PI / 2);
 
@@ -37,44 +42,94 @@ export function createTerrain(): THREE.Mesh {
     const z = position.getZ(i);
     const h = getHeightAt(x, z);
     position.setY(i, h);
-    terrainT.push(THREE.MathUtils.clamp((h + HEIGHT_SCALE) / (HEIGHT_SCALE * 2), 0, 1));
+    terrainT.push(getBiomeAt(h));
   }
 
   geometry.setAttribute("terrainT", new THREE.Float32BufferAttribute(terrainT, 1));
   geometry.computeVertexNormals();
 
   const loader = new THREE.TextureLoader();
-  const sandMap = loadTiledTexture(loader, "/textures/sand/diff.jpg", true);
-  const grassMap = loadTiledTexture(loader, "/textures/grass/diff.jpg", true);
-  const rockMap = loadTiledTexture(loader, "/textures/rock/diff.jpg", true);
-  grassMap.repeat.set(TEXTURE_REPEAT, TEXTURE_REPEAT);
+  const sandDiff = loadTiled(loader, "/textures/sand/diff.jpg", true);
+  const sandNor = loadTiled(loader, "/textures/sand/nor.jpg", false);
+  const sandRough = loadTiled(loader, "/textures/sand/rough.jpg", false);
 
-  const material = new THREE.MeshStandardMaterial({ map: grassMap, roughness: 1, metalness: 0 });
+  const grassDiff = loadTiled(loader, "/textures/grass/diff.jpg", true);
+  const grassNor = loadTiled(loader, "/textures/grass/nor.jpg", false);
+  const grassRough = loadTiled(loader, "/textures/grass/rough.jpg", false);
+  grassDiff.repeat.set(TEXTURE_REPEAT, TEXTURE_REPEAT);
+
+  const rockDiff = loadTiled(loader, "/textures/rock/diff.jpg", true);
+  const rockNor = loadTiled(loader, "/textures/rock/nor.jpg", false);
+  const rockRough = loadTiled(loader, "/textures/rock/rough.jpg", false);
+
+  const material = new THREE.MeshStandardMaterial({
+    map: grassDiff,
+    normalMap: grassNor,
+    roughnessMap: grassRough,
+    roughness: 1,
+    metalness: 0,
+  });
 
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.sandMap = { value: sandMap };
-    shader.uniforms.rockMap = { value: rockMap };
-    shader.uniforms.terrainRepeat = { value: TEXTURE_REPEAT };
+    shader.uniforms.sandMap = { value: sandDiff };
+    shader.uniforms.sandNormalMap = { value: sandNor };
+    shader.uniforms.sandRoughnessMap = { value: sandRough };
+    shader.uniforms.rockMap = { value: rockDiff };
+    shader.uniforms.rockNormalMap = { value: rockNor };
+    shader.uniforms.rockRoughnessMap = { value: rockRough };
 
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", `attribute float terrainT;\nvarying float vTerrainT;\n#include <common>`)
       .replace("#include <begin_vertex>", `#include <begin_vertex>\nvTerrainT = terrainT;`);
 
+    const blendDecl = `
+      uniform sampler2D sandMap;
+      uniform sampler2D sandNormalMap;
+      uniform sampler2D sandRoughnessMap;
+      uniform sampler2D rockMap;
+      uniform sampler2D rockNormalMap;
+      uniform sampler2D rockRoughnessMap;
+      varying float vTerrainT;
+      float terrainSandW() { return 1.0 - smoothstep( 0.0, 0.32, vTerrainT ); }
+      float terrainRockW() { return smoothstep( 0.58, 0.85, vTerrainT ); }
+    `;
+
     shader.fragmentShader = shader.fragmentShader
-      .replace(
-        "#include <common>",
-        `uniform sampler2D sandMap;\nuniform sampler2D rockMap;\nuniform float terrainRepeat;\nvarying float vTerrainT;\n#include <common>`,
-      )
+      .replace("#include <common>", `${blendDecl}\n#include <common>`)
       .replace(
         "#include <map_fragment>",
         `
-        vec2 terrainUv = vMapUv;
-        vec4 sandColor = texture2D( sandMap, terrainUv );
-        vec4 grassColor = texture2D( map, terrainUv );
-        vec4 rockColor = texture2D( rockMap, terrainUv );
-        vec4 blendedColor = mix( sandColor, grassColor, smoothstep( 0.0, 0.32, vTerrainT ) );
-        blendedColor = mix( blendedColor, rockColor, smoothstep( 0.58, 0.85, vTerrainT ) );
+        vec4 sandColor = texture2D( sandMap, vMapUv );
+        vec4 grassColor = texture2D( map, vMapUv );
+        vec4 rockColor = texture2D( rockMap, vMapUv );
+        vec4 blendedColor = mix( grassColor, sandColor, terrainSandW() );
+        blendedColor = mix( blendedColor, rockColor, terrainRockW() );
         diffuseColor *= blendedColor;
+        `,
+      )
+      .replace(
+        "#include <roughnessmap_fragment>",
+        `
+        float roughnessFactor = roughness;
+        vec4 sandR = texture2D( sandRoughnessMap, vMapUv );
+        vec4 grassR = texture2D( roughnessMap, vMapUv );
+        vec4 rockR = texture2D( rockRoughnessMap, vMapUv );
+        vec4 blendedRough = mix( grassR, sandR, terrainSandW() );
+        blendedRough = mix( blendedRough, rockR, terrainRockW() );
+        roughnessFactor *= blendedRough.g;
+        `,
+      )
+      .replace(
+        "#include <normal_fragment_maps>",
+        `
+        vec4 sandN = texture2D( sandNormalMap, vMapUv );
+        vec4 grassN = texture2D( normalMap, vMapUv );
+        vec4 rockN = texture2D( rockNormalMap, vMapUv );
+        vec4 blendedN = mix( grassN, sandN, terrainSandW() );
+        blendedN = mix( blendedN, rockN, terrainRockW() );
+        vec3 mapN = blendedN.xyz * 2.0 - 1.0;
+        mapN.xy *= normalScale;
+        normal = normalize( tbn * mapN );
         `,
       );
   };
