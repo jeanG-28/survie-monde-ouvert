@@ -11,6 +11,7 @@ import { createSky } from "./sky";
 import { createComposer } from "./postprocessing";
 import { createGrass } from "./grass";
 import { createPond } from "./water";
+import { createDecorations } from "./decorations";
 
 // --- Scène / rendu ---
 const scene = new THREE.Scene();
@@ -62,6 +63,7 @@ scene.add(terrain);
 
 const grass = createGrass(scene);
 const pond = createPond(scene);
+createDecorations(scene, TERRAIN_SIZE);
 
 const resourceWorld = new ResourceWorld(scene);
 
@@ -174,8 +176,8 @@ function updatePlayer(dt: number) {
   const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
 
   const move = new THREE.Vector3();
-  if (keys.has("KeyW")) move.add(forward);
-  if (keys.has("KeyS")) move.sub(forward);
+  if (keys.has("KeyW")) move.sub(forward);
+  if (keys.has("KeyS")) move.add(forward);
   if (keys.has("KeyD")) move.add(right);
   if (keys.has("KeyA")) move.sub(right);
 

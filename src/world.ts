@@ -39,30 +39,84 @@ const barkMaterial = new THREE.MeshStandardMaterial({
   roughness: 1,
 });
 
-function createTree(): THREE.Object3D {
+/** Icosaèdre aux sommets déplacés aléatoirement — sert de base organique (rocher, touffe de feuillage). */
+function createJitteredBlob(radius: number, detail: number, jitterAmount: number): THREE.BufferGeometry {
+  const geometry = new THREE.IcosahedronGeometry(radius, detail);
+  const pos = geometry.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i);
+    v.multiplyScalar(1 + (Math.random() - 0.5) * jitterAmount);
+    pos.setXYZ(i, v.x, v.y, v.z);
+  }
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function randomLeafMaterial(): THREE.MeshStandardMaterial {
+  const leafColor = new THREE.Color(0x2e5c2a).offsetHSL((Math.random() - 0.5) * 0.04, (Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1);
+  return new THREE.MeshStandardMaterial({ color: leafColor, roughness: 0.9, flatShading: true });
+}
+
+/** Conifère : plusieurs étages de cônes décalés. */
+function createPineTree(): THREE.Object3D {
   const group = new THREE.Group();
-  const scale = 0.85 + Math.random() * 0.4;
   const trunkHeight = 1.5 + Math.random() * 0.6;
 
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.24, trunkHeight, 7), barkMaterial);
   trunk.position.y = trunkHeight / 2;
   group.add(trunk);
 
-  // Plusieurs étages de feuillage décalés, plus naturel qu'un cône unique.
-  const leafColor = new THREE.Color(0x2e5c2a).offsetHSL((Math.random() - 0.5) * 0.03, 0, (Math.random() - 0.5) * 0.08);
-  const leafMaterial = new THREE.MeshStandardMaterial({ color: leafColor, roughness: 0.9, flatShading: true });
-  const tiers = 3;
+  const leafMaterial = randomLeafMaterial();
+  const tiers = 4;
   for (let i = 0; i < tiers; i++) {
     const t = i / (tiers - 1);
-    const radius = THREE.MathUtils.lerp(1.15, 0.35, t);
-    const height = THREE.MathUtils.lerp(1.3, 0.9, t);
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(radius, height, 8), leafMaterial);
-    cone.position.y = trunkHeight + t * 1.3 + height / 2 - 0.2;
+    const radius = THREE.MathUtils.lerp(1.15, 0.3, t);
+    const height = THREE.MathUtils.lerp(1.2, 0.85, t);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(radius, height, 9), leafMaterial);
+    cone.position.y = trunkHeight + t * 1.05 + height / 2 - 0.2;
     cone.rotation.y = Math.random() * Math.PI;
+    cone.castShadow = true;
     group.add(cone);
   }
+  return group;
+}
 
+/** Feuillu : houppier fait de plusieurs touffes organiques regroupées. */
+function createBroadleafTree(): THREE.Object3D {
+  const group = new THREE.Group();
+  const trunkHeight = 1.3 + Math.random() * 0.7;
+
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.22, trunkHeight, 7), barkMaterial);
+  trunk.position.y = trunkHeight / 2;
+  group.add(trunk);
+
+  const leafMaterial = randomLeafMaterial();
+  const canopyCenter = trunkHeight + 0.6;
+  const blobCount = 5 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < blobCount; i++) {
+    const angle = (i / blobCount) * Math.PI * 2 + Math.random() * 0.6;
+    const dist = 0.35 + Math.random() * 0.35;
+    const blobRadius = 0.55 + Math.random() * 0.35;
+    const blob = new THREE.Mesh(createJitteredBlob(blobRadius, 1, 0.35), leafMaterial);
+    blob.position.set(Math.cos(angle) * dist, canopyCenter + (Math.random() - 0.5) * 0.5, Math.sin(angle) * dist);
+    blob.castShadow = true;
+    group.add(blob);
+  }
+  // Touffe centrale pour combler le sommet.
+  const topBlob = new THREE.Mesh(createJitteredBlob(0.7, 1, 0.3), leafMaterial);
+  topBlob.position.y = canopyCenter + 0.5;
+  topBlob.castShadow = true;
+  group.add(topBlob);
+
+  return group;
+}
+
+function createTree(): THREE.Object3D {
+  const group = Math.random() < 0.55 ? createPineTree() : createBroadleafTree();
+  const scale = 0.85 + Math.random() * 0.4;
   group.scale.setScalar(scale);
+  group.rotation.y = Math.random() * Math.PI * 2;
   group.traverse((o) => {
     if (o instanceof THREE.Mesh) o.castShadow = true;
   });
@@ -70,18 +124,7 @@ function createTree(): THREE.Object3D {
 }
 
 function createRock(): THREE.Object3D {
-  const geometry = new THREE.IcosahedronGeometry(0.55, 1);
-  const pos = geometry.attributes.position;
-  // Déplace chaque sommet aléatoirement pour casser la symétrie parfaite de l'icosaèdre.
-  for (let i = 0; i < pos.count; i++) {
-    const v = new THREE.Vector3(pos.getX(i), pos.getY(i), pos.getZ(i));
-    const jitter = 1 + (Math.random() - 0.5) * 0.3;
-    v.multiplyScalar(jitter);
-    pos.setXYZ(i, v.x, v.y, v.z);
-  }
-  geometry.computeVertexNormals();
-
-  const rock = new THREE.Mesh(geometry, rockMaterial);
+  const rock = new THREE.Mesh(createJitteredBlob(0.55, 1, 0.3), rockMaterial);
   rock.scale.set(1 + Math.random() * 0.4, 0.55 + Math.random() * 0.3, 1 + Math.random() * 0.4);
   rock.rotation.y = Math.random() * Math.PI * 2;
   rock.castShadow = true;
@@ -94,7 +137,7 @@ export class ResourceWorld {
   readonly nodes: ResourceNode[] = [];
   private scene: THREE.Scene;
 
-  constructor(scene: THREE.Scene, treeCount = 60, rockCount = 40) {
+  constructor(scene: THREE.Scene, treeCount = 95, rockCount = 45) {
     this.scene = scene;
     for (let i = 0; i < treeCount; i++) this.spawnNode("bois", createTree, 30);
     for (let i = 0; i < rockCount; i++) this.spawnNode("pierre", createRock, 20);
