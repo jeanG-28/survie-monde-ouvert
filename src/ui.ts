@@ -4,6 +4,8 @@ import type { ItemId } from "./inventory";
 export class UI {
   private woodCountEl = document.getElementById("wood-count")!;
   private stoneCountEl = document.getElementById("stone-count")!;
+  private meatCountEl = document.getElementById("meat-count")!;
+  private furCountEl = document.getElementById("fur-count")!;
   private heldItemEl = document.getElementById("held-item")!;
   private promptEl = document.getElementById("prompt")!;
   private buildIndicatorEl = document.getElementById("build-indicator")!;
@@ -29,6 +31,8 @@ export class UI {
   private updateResourceCounts() {
     this.woodCountEl.textContent = String(this.inventory.getResource("bois"));
     this.stoneCountEl.textContent = String(this.inventory.getResource("pierre"));
+    this.meatCountEl.textContent = String(this.inventory.getResource("viande"));
+    this.furCountEl.textContent = String(this.inventory.getResource("fourrure"));
   }
 
   private renderRecipes() {

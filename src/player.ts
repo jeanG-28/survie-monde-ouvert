@@ -6,17 +6,20 @@ const TARGET_HEIGHT = 1.8;
 
 function findHandBone(root: THREE.Object3D): THREE.Object3D | null {
   let found: THREE.Object3D | null = null;
+  // Cherche un os "main droite" (ex. mixamorig:RightHand) sans ses doigts (RightHandThumb1, ...).
   root.traverse((obj) => {
     if (found) return;
-    if ((obj as THREE.Bone).isBone && /hand.*r|r.*hand|hand_r|r_hand/i.test(obj.name)) {
+    const name = obj.name.toLowerCase();
+    if ((obj as THREE.Bone).isBone && name.includes("right") && name.includes("hand") && !/thumb|index|middle|ring|pinky/.test(name)) {
       found = obj;
     }
   });
   if (!found) {
-    // À défaut, on prend n'importe quel os contenant "hand" dans son nom.
+    // À défaut, n'importe quel os "main droite", doigts inclus.
     root.traverse((obj) => {
       if (found) return;
-      if ((obj as THREE.Bone).isBone && /hand/i.test(obj.name)) found = obj;
+      const name = obj.name.toLowerCase();
+      if ((obj as THREE.Bone).isBone && name.includes("right") && name.includes("hand")) found = obj;
     });
   }
   return found;

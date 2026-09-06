@@ -1,5 +1,5 @@
-export type ResourceType = "bois" | "pierre";
-export type ItemId = "hache" | "epee" | "pioche";
+export type ResourceType = "bois" | "pierre" | "viande" | "fourrure";
+export type ItemId = "hache" | "epee" | "pioche" | "arc" | "manteau";
 
 export interface Recipe {
   id: ItemId;
@@ -11,6 +11,8 @@ export const RECIPES: Recipe[] = [
   { id: "hache", label: "Hache", cost: { bois: 4, pierre: 2 } },
   { id: "pioche", label: "Pioche", cost: { bois: 4, pierre: 3 } },
   { id: "epee", label: "Épée", cost: { bois: 2, pierre: 4 } },
+  { id: "arc", label: "Arc", cost: { bois: 5, fourrure: 3 } },
+  { id: "manteau", label: "Manteau de fourrure", cost: { fourrure: 6, viande: 2 } },
 ];
 
 export const BUILD_COSTS = {
@@ -22,7 +24,7 @@ export type BuildPieceType = keyof typeof BUILD_COSTS;
 type Listener = () => void;
 
 export class Inventory {
-  private resources: Record<ResourceType, number> = { bois: 0, pierre: 0 };
+  private resources: Record<ResourceType, number> = { bois: 0, pierre: 0, viande: 0, fourrure: 0 };
   private items: Partial<Record<ItemId, number>> = {};
   private listeners: Listener[] = [];
 

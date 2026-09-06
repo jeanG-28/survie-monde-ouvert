@@ -124,85 +124,14 @@ function createButterflies(scene: THREE.Scene, count: number): Updatable {
   return { update };
 }
 
-// --- Petits mammifères (lapins) : forme procédurale, sautillent dans un territoire restreint. ---
-function createRabbit(): THREE.Group {
-  const group = new THREE.Group();
-  const furColor = new THREE.Color(0x8a7358).offsetHSL(0, 0, (Math.random() - 0.5) * 0.1);
-  const mat = new THREE.MeshStandardMaterial({ color: furColor, roughness: 0.95 });
-
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.12, 3, 6), mat);
-  body.rotation.z = Math.PI / 2;
-  body.position.y = 0.11;
-  group.add(body);
-
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), mat);
-  head.position.set(0.14, 0.16, 0);
-  group.add(head);
-
-  for (const side of [-1, 1]) {
-    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.09, 6), mat);
-    ear.position.set(0.15, 0.25, side * 0.03);
-    ear.rotation.z = -0.3;
-    group.add(ear);
-  }
-
-  const tail = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), mat);
-  tail.position.set(-0.15, 0.14, 0);
-  group.add(tail);
-
-  group.traverse((o) => {
-    if (o instanceof THREE.Mesh) o.castShadow = true;
-  });
-  return group;
-}
-
-function createRabbits(scene: THREE.Scene, count: number): Updatable {
-  const half = TERRAIN_SIZE / 2 - 10;
-  const rabbits: { group: THREE.Group; home: THREE.Vector2; target: THREE.Vector2; phase: number; speed: number }[] = [];
-
-  for (let i = 0; i < count; i++) {
-    const group = createRabbit();
-    const home = randomGroundPoint(half);
-    scene.add(group);
-    rabbits.push({ group, home, target: home.clone(), phase: Math.random() * Math.PI * 2, speed: 0.5 + Math.random() * 0.3 });
-  }
-
-  function pickNewTarget(r: (typeof rabbits)[number]) {
-    const angle = Math.random() * Math.PI * 2;
-    const dist = Math.random() * 4;
-    r.target = new THREE.Vector2(r.home.x + Math.cos(angle) * dist, r.home.y + Math.sin(angle) * dist);
-  }
-
-  function update(dt: number, now: number) {
-    for (const r of rabbits) {
-      const pos2 = new THREE.Vector2(r.group.position.x, r.group.position.z);
-      const toTarget = r.target.clone().sub(pos2);
-      if (toTarget.length() < 0.15) {
-        if (Math.random() < 0.01) pickNewTarget(r);
-      } else {
-        r.group.rotation.y = Math.atan2(toTarget.x, toTarget.y);
-        toTarget.normalize().multiplyScalar(r.speed * dt);
-        pos2.add(toTarget);
-      }
-      const ground = getHeightAt(pos2.x, pos2.y);
-      const hop = Math.abs(Math.sin(now * 6 + r.phase)) * 0.06;
-      r.group.position.set(pos2.x, ground + hop, pos2.y);
-    }
-  }
-
-  return { update };
-}
-
 export function createWildlife(scene: THREE.Scene) {
-  const birds = createBirds(scene, 7);
-  const butterflies = createButterflies(scene, 18);
-  const rabbits = createRabbits(scene, 8);
+  const birds = createBirds(scene, 11);
+  const butterflies = createButterflies(scene, 26);
 
   return {
     update(dt: number, now: number) {
       birds.update(dt, now);
       butterflies.update(dt, now);
-      rabbits.update(dt, now);
     },
   };
 }

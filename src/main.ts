@@ -13,6 +13,7 @@ import { createGrass } from "./grass";
 import { createPond } from "./water";
 import { createDecorations } from "./decorations";
 import { createWildlife } from "./wildlife";
+import { AnimalWorld } from "./animals";
 
 // --- Scène / rendu ---
 const scene = new THREE.Scene();
@@ -66,6 +67,7 @@ const grass = createGrass(scene);
 const pond = createPond(scene);
 createDecorations(scene, TERRAIN_SIZE);
 const wildlife = createWildlife(scene);
+const animalWorld = new AnimalWorld(scene);
 
 const resourceWorld = new ResourceWorld(scene);
 
@@ -85,6 +87,11 @@ function equip(id: ItemId) {
   if (!player) return;
   if (equippedMesh) player.rightHand.remove(equippedMesh);
   equippedMesh = createHeldItemMesh(id);
+  // L'os de la main hérite d'une échelle interne (liée au squelette d'origine) très différente
+  // de l'échelle visuelle du personnage : on la compense pour que l'objet tenu ait une taille réaliste.
+  const worldScale = new THREE.Vector3();
+  player.rightHand.getWorldScale(worldScale);
+  equippedMesh.scale.set(1 / worldScale.x, 1 / worldScale.y, 1 / worldScale.z);
   player.rightHand.add(equippedMesh);
   ui.setHeldItem(RECIPES.find((r) => r.id === id)!.label);
 }
@@ -150,11 +157,23 @@ document.addEventListener("keyup", (e) => keys.delete(e.code));
 
 function tryGather() {
   if (!player) return;
-  const node = resourceWorld.findNearby(player.position);
-  if (!node) return;
-  const destroyed = resourceWorld.hit(node);
-  if (destroyed) {
-    inventory.addResource(node.type, node.type === "bois" ? 5 : 4);
+  const resourceNode = resourceWorld.findNearby(player.position);
+  const animalNode = animalWorld.findNearby(player.position);
+
+  const resourceDist = resourceNode ? resourceNode.position.distanceTo(player.position) : Infinity;
+  const animalDist = animalNode ? animalNode.position.distanceTo(player.position) : Infinity;
+
+  if (animalNode && animalDist <= resourceDist) {
+    const loot = animalWorld.hit(animalNode);
+    if (loot) {
+      inventory.addResource("viande", loot.viande);
+      inventory.addResource("fourrure", loot.fourrure);
+    }
+  } else if (resourceNode) {
+    const destroyed = resourceWorld.hit(resourceNode);
+    if (destroyed) {
+      inventory.addResource(resourceNode.type, resourceNode.type === "bois" ? 5 : 4);
+    }
   }
 }
 
@@ -224,7 +243,16 @@ function updateCamera() {
 }
 
 function updateInteractionPrompt() {
-  const node = resourceWorld.findNearby(player.position);
+  const resourceNode = resourceWorld.findNearby(player.position);
+  const animalNode = animalWorld.findNearby(player.position);
+  const resourceDist = resourceNode ? resourceNode.position.distanceTo(player.position) : Infinity;
+  const animalDist = animalNode ? animalNode.position.distanceTo(player.position) : Infinity;
+
+  if (animalNode && animalDist <= resourceDist) {
+    ui.showPrompt(`Appuyez sur E pour chasser (${animalNode.species}, ${animalNode.hp}/${animalNode.maxHp} PV)`);
+    return;
+  }
+  const node = resourceNode;
   ui.showPrompt(node ? `Appuyez sur E pour récolter (${node.type})` : null);
 }
 
@@ -248,6 +276,7 @@ function animate() {
   grass.update(now);
   pond.update(dt);
   wildlife.update(dt, now);
+  animalWorld.update(dt, now);
   updateInteractionPrompt();
   updateBuildIndicator();
 
