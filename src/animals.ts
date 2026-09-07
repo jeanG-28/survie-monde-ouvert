@@ -28,28 +28,49 @@ function randomGroundPoint(half: number): THREE.Vector2 {
   return new THREE.Vector2(x, z);
 }
 
+const EYE_MATERIAL = new THREE.MeshStandardMaterial({ color: 0x1a1410, roughness: 0.3 });
+const HOOF_MATERIAL = new THREE.MeshStandardMaterial({ color: 0x2a2018, roughness: 0.7 });
+
 function createRabbitMesh(): THREE.Group {
   const group = new THREE.Group();
   const furColor = new THREE.Color(0x8a7358).offsetHSL(0, 0, (Math.random() - 0.5) * 0.1);
   const mat = new THREE.MeshStandardMaterial({ color: furColor, roughness: 0.95 });
+  const innerEarMat = new THREE.MeshStandardMaterial({ color: 0xc9a9a0, roughness: 0.8 });
 
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.12, 3, 6), mat);
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.12, 5, 12), mat);
   body.rotation.z = Math.PI / 2;
   body.position.y = 0.11;
   group.add(body);
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), mat);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 10), mat);
   head.position.set(0.14, 0.16, 0);
   group.add(head);
 
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 6), HOOF_MATERIAL);
+  nose.position.set(0.21, 0.15, 0);
+  group.add(nose);
+
   for (const side of [-1, 1]) {
-    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.09, 6), mat);
-    ear.position.set(0.15, 0.25, side * 0.03);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.012, 6, 6), EYE_MATERIAL);
+    eye.position.set(0.18, 0.18, side * 0.055);
+    group.add(eye);
+
+    const ear = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.1, 8), mat);
+    ear.position.set(0.15, 0.26, side * 0.03);
     ear.rotation.z = -0.3;
     group.add(ear);
+
+    const earInner = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.07, 6), innerEarMat);
+    earInner.position.set(0.16, 0.25, side * 0.03);
+    earInner.rotation.z = -0.3;
+    group.add(earInner);
+
+    const paw = new THREE.Mesh(new THREE.SphereGeometry(0.028, 6, 6), mat);
+    paw.position.set(0.06, 0.03, side * 0.05);
+    group.add(paw);
   }
 
-  const tail = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), mat);
+  const tail = new THREE.Mesh(new THREE.SphereGeometry(0.038, 8, 8), mat);
   tail.position.set(-0.15, 0.14, 0);
   group.add(tail);
 
@@ -63,27 +84,59 @@ function createDeerMesh(): THREE.Group {
   const group = new THREE.Group();
   const furColor = new THREE.Color(0x7a5a3a).offsetHSL(0, 0, (Math.random() - 0.5) * 0.08);
   const mat = new THREE.MeshStandardMaterial({ color: furColor, roughness: 0.9 });
+  const bellyMat = new THREE.MeshStandardMaterial({ color: furColor.clone().offsetHSL(0, -0.15, 0.18), roughness: 0.9 });
 
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.5, 4, 8), mat);
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.22, 0.5, 6, 12), mat);
   body.rotation.z = Math.PI / 2;
   body.position.y = 0.55;
   group.add(body);
 
-  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 0.35, 6), mat);
+  const belly = new THREE.Mesh(new THREE.CapsuleGeometry(0.15, 0.42, 4, 8), bellyMat);
+  belly.rotation.z = Math.PI / 2;
+  belly.position.set(0, 0.44, 0);
+  belly.scale.y = 0.7;
+  group.add(belly);
+
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 0.35, 10), mat);
   neck.position.set(0.32, 0.72, 0);
   neck.rotation.z = -0.6;
   group.add(neck);
 
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), mat);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 10), mat);
   head.position.set(0.48, 0.92, 0);
   group.add(head);
 
+  const snout = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.08, 4, 8), mat);
+  snout.rotation.z = Math.PI / 2;
+  snout.position.set(0.6, 0.88, 0);
+  group.add(snout);
+
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 6), HOOF_MATERIAL);
+  nose.position.set(0.65, 0.87, 0);
+  group.add(nose);
+
   const antlerMat = new THREE.MeshStandardMaterial({ color: 0x5c4a38, roughness: 0.8 });
   for (const side of [-1, 1]) {
-    const antler = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.22, 5), antlerMat);
-    antler.position.set(0.5, 1.08, side * 0.05);
-    antler.rotation.z = -0.2;
-    group.add(antler);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.016, 6, 6), EYE_MATERIAL);
+    eye.position.set(0.55, 0.95, side * 0.1);
+    group.add(eye);
+
+    const earMesh = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.12, 8), mat);
+    earMesh.position.set(0.44, 1.0, side * 0.08);
+    earMesh.rotation.z = -0.3;
+    earMesh.rotation.x = side * 0.4;
+    group.add(earMesh);
+
+    const antlerBase = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.22, 6), antlerMat);
+    antlerBase.position.set(0.5, 1.08, side * 0.05);
+    antlerBase.rotation.z = -0.2;
+    group.add(antlerBase);
+
+    const antlerTine = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.11, 5), antlerMat);
+    antlerTine.position.set(0.53, 1.16, side * 0.09);
+    antlerTine.rotation.z = -0.6;
+    antlerTine.rotation.y = side * 0.3;
+    group.add(antlerTine);
   }
 
   for (const [sx, sz] of [
@@ -92,12 +145,16 @@ function createDeerMesh(): THREE.Group {
     [-0.18, 0.14],
     [-0.18, -0.14],
   ]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.55, 6), mat);
-    leg.position.set(sx, 0.28, sz);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.028, 0.5, 8), mat);
+    leg.position.set(sx, 0.3, sz);
     group.add(leg);
+
+    const hoof = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.024, 0.08, 8), HOOF_MATERIAL);
+    hoof.position.set(sx, 0.045, sz);
+    group.add(hoof);
   }
 
-  const tail = new THREE.Mesh(new THREE.SphereGeometry(0.05, 6, 6), mat);
+  const tail = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 8), mat);
   tail.position.set(-0.32, 0.62, 0);
   group.add(tail);
 

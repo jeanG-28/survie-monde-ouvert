@@ -72,18 +72,19 @@ function createPineTree(): THREE.Object3D {
   const group = new THREE.Group();
   const trunkHeight = 1.5 + Math.random() * 0.6;
 
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.24, trunkHeight, 7), barkMaterial);
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.25, trunkHeight, 10, 3), barkMaterial);
   trunk.position.y = trunkHeight / 2;
+  trunk.castShadow = true;
   group.add(trunk);
 
   const [leafDark, leafLight] = createLeafPalette();
-  const tiers = 4;
+  const tiers = 6;
   for (let i = 0; i < tiers; i++) {
     const t = i / (tiers - 1);
-    const radius = THREE.MathUtils.lerp(1.15, 0.3, t);
-    const height = THREE.MathUtils.lerp(1.2, 0.85, t);
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(radius, height, 9), i % 2 === 0 ? leafDark : leafLight);
-    cone.position.y = trunkHeight + t * 1.05 + height / 2 - 0.2;
+    const radius = THREE.MathUtils.lerp(1.2, 0.28, t);
+    const height = THREE.MathUtils.lerp(1.05, 0.75, t);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(radius, height, 12, 2), i % 2 === 0 ? leafDark : leafLight);
+    cone.position.y = trunkHeight + t * 0.75 + height / 2 - 0.2;
     cone.rotation.y = Math.random() * Math.PI;
     cone.castShadow = true;
     group.add(cone);
@@ -96,24 +97,36 @@ function createBroadleafTree(): THREE.Object3D {
   const group = new THREE.Group();
   const trunkHeight = 1.3 + Math.random() * 0.7;
 
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.22, trunkHeight, 7), barkMaterial);
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.23, trunkHeight, 10, 3), barkMaterial);
   trunk.position.y = trunkHeight / 2;
+  trunk.castShadow = true;
   group.add(trunk);
+
+  // Quelques racines/branches basses pour casser la silhouette cylindrique du tronc.
+  for (let i = 0; i < 2; i++) {
+    const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.06, 0.4, 6), barkMaterial);
+    const angle = Math.random() * Math.PI * 2;
+    branch.position.set(Math.cos(angle) * 0.12, trunkHeight * (0.55 + Math.random() * 0.2), Math.sin(angle) * 0.12);
+    branch.rotation.z = Math.PI / 2.4;
+    branch.rotation.y = angle;
+    branch.castShadow = true;
+    group.add(branch);
+  }
 
   const [leafDark, leafLight] = createLeafPalette();
   const canopyCenter = trunkHeight + 0.6;
-  const blobCount = 5 + Math.floor(Math.random() * 3);
+  const blobCount = 7 + Math.floor(Math.random() * 3);
   for (let i = 0; i < blobCount; i++) {
     const angle = (i / blobCount) * Math.PI * 2 + Math.random() * 0.6;
-    const dist = 0.35 + Math.random() * 0.35;
-    const blobRadius = 0.55 + Math.random() * 0.35;
-    const blob = new THREE.Mesh(createJitteredBlob(blobRadius, 1, 0.35), Math.random() < 0.5 ? leafDark : leafLight);
+    const dist = 0.32 + Math.random() * 0.38;
+    const blobRadius = 0.5 + Math.random() * 0.35;
+    const blob = new THREE.Mesh(createJitteredBlob(blobRadius, 2, 0.3), Math.random() < 0.5 ? leafDark : leafLight);
     blob.position.set(Math.cos(angle) * dist, canopyCenter + (Math.random() - 0.5) * 0.5, Math.sin(angle) * dist);
     blob.castShadow = true;
     group.add(blob);
   }
   // Touffe centrale pour combler le sommet.
-  const topBlob = new THREE.Mesh(createJitteredBlob(0.7, 1, 0.3), leafLight);
+  const topBlob = new THREE.Mesh(createJitteredBlob(0.7, 2, 0.28), leafLight);
   topBlob.position.y = canopyCenter + 0.5;
   topBlob.castShadow = true;
   group.add(topBlob);
@@ -133,11 +146,26 @@ function createTree(): THREE.Object3D {
 }
 
 function createRock(): THREE.Object3D {
-  const rock = new THREE.Mesh(createJitteredBlob(0.55, 1, 0.3), rockMaterial);
-  rock.scale.set(1 + Math.random() * 0.4, 0.55 + Math.random() * 0.3, 1 + Math.random() * 0.4);
-  rock.rotation.y = Math.random() * Math.PI * 2;
-  rock.castShadow = true;
-  return rock;
+  const group = new THREE.Group();
+  const main = new THREE.Mesh(createJitteredBlob(0.55, 2, 0.32), rockMaterial);
+  main.scale.set(1 + Math.random() * 0.4, 0.55 + Math.random() * 0.3, 1 + Math.random() * 0.4);
+  main.castShadow = true;
+  group.add(main);
+
+  // Petits éclats autour du bloc principal pour casser la silhouette d'un simple blob.
+  const shardCount = 1 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < shardCount; i++) {
+    const shard = new THREE.Mesh(createJitteredBlob(0.14 + Math.random() * 0.12, 1, 0.35), rockMaterial);
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 0.35 + Math.random() * 0.25;
+    shard.position.set(Math.cos(angle) * dist, -0.05 + Math.random() * 0.1, Math.sin(angle) * dist);
+    shard.rotation.y = Math.random() * Math.PI * 2;
+    shard.castShadow = true;
+    group.add(shard);
+  }
+
+  group.rotation.y = Math.random() * Math.PI * 2;
+  return group;
 }
 
 const RESPAWN_SECONDS = 30;

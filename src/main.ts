@@ -18,7 +18,7 @@ import { AnimalWorld } from "./animals";
 // --- Scène / rendu ---
 const scene = new THREE.Scene();
 
-const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 300);
+const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 420);
 
 const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -67,9 +67,9 @@ const grass = createGrass(scene);
 const pond = createPond(scene);
 createDecorations(scene, TERRAIN_SIZE);
 const wildlife = createWildlife(scene);
-const animalWorld = new AnimalWorld(scene);
+const animalWorld = new AnimalWorld(scene, 20, 9);
 
-const resourceWorld = new ResourceWorld(scene);
+const resourceWorld = new ResourceWorld(scene, 145, 68);
 
 const inventory = new Inventory();
 const buildingSystem = new BuildingSystem(scene, inventory);

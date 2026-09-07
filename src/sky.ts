@@ -3,7 +3,7 @@ import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 
 /** Charge un vrai ciel HDRI (photo réelle) comme fond ET comme éclairage d'ambiance/reflets. */
 export function createSky(scene: THREE.Scene, renderer: THREE.WebGLRenderer): void {
-  scene.fog = new THREE.Fog(0xbfd4e0, 50, 140);
+  scene.fog = new THREE.Fog(0xbfd4e0, 60, 190);
 
   const pmrem = new THREE.PMREMGenerator(renderer);
   pmrem.compileEquirectangularShader();

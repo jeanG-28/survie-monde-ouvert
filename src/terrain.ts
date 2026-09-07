@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { fractalNoise } from "./noise";
 
-export const TERRAIN_SIZE = 200;
+export const TERRAIN_SIZE = 280;
 const HEIGHT_SCALE = 7;
 const NOISE_SCALE = 0.025;
 const TEXTURE_REPEAT = 26;
@@ -48,7 +48,7 @@ function loadTiled(loader: THREE.TextureLoader, url: string, srgb: boolean): THR
 }
 
 export function createTerrain(): THREE.Mesh {
-  const segments = 220;
+  const segments = 260;
   const geometry = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, segments, segments);
   geometry.rotateX(-Math.PI / 2);
 
