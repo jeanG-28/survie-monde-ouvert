@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { getHeightAt, isUnderwater, POND_CENTER, POND_RADIUS, WATER_LEVEL } from "./terrain";
+import { getClimateAt, getHeightAt, isUnderwater, POND_CENTER, POND_RADIUS, WATER_LEVEL } from "./terrain";
 
 const REED_COUNT = 500;
 const LILY_COUNT = 22;
@@ -90,6 +90,7 @@ function createBushes(scene: THREE.Scene, terrainSize: number) {
     const x = (Math.random() - 0.5) * 2 * half;
     const z = (Math.random() - 0.5) * 2 * half;
     if (isUnderwater(x, z)) continue;
+    if (getClimateAt(x, z) < -0.32) continue; // pas de buissons à baies sous la neige
     const h = getHeightAt(x, z);
 
     const group = new THREE.Group();

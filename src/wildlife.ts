@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { getHeightAt, isUnderwater, TERRAIN_SIZE } from "./terrain";
+import { COAST_START, getHeightAt, isUnderwater, POND_CENTER, POND_RADIUS, TERRAIN_SIZE, WATER_LEVEL } from "./terrain";
 
 type Updatable = { update: (dt: number, now: number) => void };
 
@@ -124,14 +124,79 @@ function createButterflies(scene: THREE.Scene, count: number): Updatable {
   return { update };
 }
 
+// --- Poissons : nagent en boucle sous la surface, dans l'étang et le long de la côte. ---
+function createFish(): { group: THREE.Group; tail: THREE.Mesh } {
+  const group = new THREE.Group();
+  const hue = 190 + Math.random() * 40;
+  const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(`hsl(${hue}, 55%, 45%)`), roughness: 0.5, metalness: 0.1 });
+  const bellyMat = new THREE.MeshStandardMaterial({ color: 0xe8e4d0, roughness: 0.5 });
+
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.1, 3, 8), mat);
+  body.rotation.z = Math.PI / 2;
+  group.add(body);
+
+  const belly = new THREE.Mesh(new THREE.CapsuleGeometry(0.028, 0.08, 2, 6), bellyMat);
+  belly.rotation.z = Math.PI / 2;
+  belly.position.y = -0.02;
+  group.add(belly);
+
+  const dorsal = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.05, 3), mat);
+  dorsal.position.y = 0.045;
+  dorsal.rotation.z = Math.PI;
+  group.add(dorsal);
+
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.08, 3), mat);
+  tail.rotation.z = -Math.PI / 2;
+  tail.position.x = -0.11;
+  group.add(tail);
+
+  group.traverse((o) => {
+    if (o instanceof THREE.Mesh) o.castShadow = false;
+  });
+  return { group, tail };
+}
+
+function createFishSchool(scene: THREE.Scene, count: number): Updatable {
+  const fishes: { group: THREE.Group; tail: THREE.Mesh; center: THREE.Vector2; radius: number; depth: number; speed: number; phase: number }[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const { group, tail } = createFish();
+    const inCoast = Math.random() < 0.4;
+    const center = inCoast
+      ? new THREE.Vector2(COAST_START + 15 + Math.random() * 15, (Math.random() - 0.5) * (TERRAIN_SIZE - 40))
+      : new THREE.Vector2(POND_CENTER.x, POND_CENTER.y);
+    const radius = inCoast ? 4 + Math.random() * 6 : Math.random() * (POND_RADIUS - 4);
+    const depth = 0.3 + Math.random() * 0.9;
+    const speed = 0.3 + Math.random() * 0.4;
+    const phase = Math.random() * Math.PI * 2;
+    scene.add(group);
+    fishes.push({ group, tail, center, radius, depth, speed, phase });
+  }
+
+  function update(_dt: number, now: number) {
+    for (const f of fishes) {
+      const angle = now * f.speed + f.phase;
+      const x = f.center.x + Math.cos(angle) * f.radius;
+      const z = f.center.y + Math.sin(angle * 1.3) * f.radius * 0.6;
+      f.group.position.set(x, WATER_LEVEL - f.depth, z);
+      f.group.rotation.y = -angle * 1.3 + Math.PI / 2;
+      f.tail.rotation.y = Math.sin(now * 8 + f.phase) * 0.6;
+    }
+  }
+
+  return { update };
+}
+
 export function createWildlife(scene: THREE.Scene) {
   const birds = createBirds(scene, 11);
   const butterflies = createButterflies(scene, 26);
+  const fish = createFishSchool(scene, 24);
 
   return {
     update(dt: number, now: number) {
       birds.update(dt, now);
       butterflies.update(dt, now);
+      fish.update(dt, now);
     },
   };
 }

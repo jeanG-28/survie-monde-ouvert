@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { getHeightAt, isUnderwater, TERRAIN_SIZE } from "./terrain";
 
-export type Species = "lapin" | "cerf";
+export type Species = "lapin" | "cerf" | "poule";
 
 export interface AnimalNode {
   group: THREE.Group;
@@ -73,6 +73,77 @@ function createRabbitMesh(): THREE.Group {
   const tail = new THREE.Mesh(new THREE.SphereGeometry(0.038, 8, 8), mat);
   tail.position.set(-0.15, 0.14, 0);
   group.add(tail);
+
+  group.traverse((o) => {
+    if (o instanceof THREE.Mesh) o.castShadow = true;
+  });
+  return group;
+}
+
+const BEAK_MATERIAL = new THREE.MeshStandardMaterial({ color: 0xd9a520, roughness: 0.6 });
+const COMB_MATERIAL = new THREE.MeshStandardMaterial({ color: 0xc21f34, roughness: 0.6 });
+
+function createChickenMesh(): THREE.Group {
+  const group = new THREE.Group();
+  const white = Math.random() < 0.6;
+  const baseColor = white ? 0xefe9dd : 0x8a5a34;
+  const mat = new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.85 });
+  const speckleMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1c, roughness: 0.85 });
+
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 10), mat);
+  body.scale.set(1, 1.15, 1.3);
+  body.position.y = 0.18;
+  group.add(body);
+
+  if (!white) {
+    for (let i = 0; i < 5; i++) {
+      const speckle = new THREE.Mesh(new THREE.SphereGeometry(0.018, 4, 4), speckleMat);
+      speckle.position.set((Math.random() - 0.5) * 0.16, 0.14 + Math.random() * 0.12, (Math.random() - 0.5) * 0.2);
+      group.add(speckle);
+    }
+  }
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), mat);
+  head.position.set(0.11, 0.32, 0);
+  group.add(head);
+
+  const beak = new THREE.Mesh(new THREE.ConeGeometry(0.022, 0.055, 6), BEAK_MATERIAL);
+  beak.rotation.z = -Math.PI / 2;
+  beak.position.set(0.18, 0.315, 0);
+  group.add(beak);
+
+  const comb = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.05, 5), COMB_MATERIAL);
+  comb.position.set(0.1, 0.39, 0);
+  group.add(comb);
+
+  const wattle = new THREE.Mesh(new THREE.SphereGeometry(0.014, 5, 5), COMB_MATERIAL);
+  wattle.position.set(0.15, 0.28, 0);
+  group.add(wattle);
+
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.009, 5, 5), EYE_MATERIAL);
+    eye.position.set(0.14, 0.34, side * 0.045);
+    group.add(eye);
+  }
+
+  // Queue en éventail : quelques plumes plates dressées vers l'arrière.
+  for (let i = -1; i <= 1; i++) {
+    const feather = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.16, 4), mat);
+    feather.position.set(-0.14, 0.28, i * 0.035);
+    feather.rotation.z = Math.PI * 0.62;
+    feather.rotation.x = i * 0.3;
+    group.add(feather);
+  }
+
+  for (const side of [-1, 1]) {
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.16, 6), BEAK_MATERIAL);
+    leg.position.set(0.02, 0.08, side * 0.05);
+    group.add(leg);
+    const foot = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.03, 4), BEAK_MATERIAL);
+    foot.rotation.x = Math.PI / 2;
+    foot.position.set(0.04, 0.005, side * 0.05);
+    group.add(foot);
+  }
 
   group.traverse((o) => {
     if (o instanceof THREE.Mesh) o.castShadow = true;
@@ -170,31 +241,40 @@ export class AnimalWorld {
   readonly nodes: AnimalNode[] = [];
   private scene: THREE.Scene;
 
-  constructor(scene: THREE.Scene, rabbitCount = 14, deerCount = 6) {
+  constructor(scene: THREE.Scene, rabbitCount = 14, deerCount = 6, chickenCount = 8) {
     this.scene = scene;
     for (let i = 0; i < rabbitCount; i++) this.spawn("lapin");
     for (let i = 0; i < deerCount; i++) this.spawn("cerf");
+    for (let i = 0; i < chickenCount; i++) this.spawn("poule");
   }
 
   private spawn(species: Species) {
     const half = TERRAIN_SIZE / 2 - 10;
     const home = randomGroundPoint(half);
-    const group = species === "lapin" ? createRabbitMesh() : createDeerMesh();
+    const group =
+      species === "lapin" ? createRabbitMesh() : species === "cerf" ? createDeerMesh() : createChickenMesh();
     const position = new THREE.Vector3(home.x, getHeightAt(home.x, home.y), home.y);
     group.position.copy(position);
     this.scene.add(group);
 
+    const stats: Record<Species, { hp: number; loot: { viande: number; fourrure: number }; speed: number; wanderRadius: number }> = {
+      lapin: { hp: 20, loot: { viande: 2, fourrure: 1 }, speed: 0.5 + Math.random() * 0.3, wanderRadius: 4 },
+      cerf: { hp: 60, loot: { viande: 5, fourrure: 3 }, speed: 0.9 + Math.random() * 0.4, wanderRadius: 8 },
+      poule: { hp: 12, loot: { viande: 1, fourrure: 0 }, speed: 0.4 + Math.random() * 0.25, wanderRadius: 2.5 },
+    };
+    const s = stats[species];
+
     const node: AnimalNode = {
       group,
       species,
-      hp: species === "lapin" ? 20 : 60,
-      maxHp: species === "lapin" ? 20 : 60,
-      loot: species === "lapin" ? { viande: 2, fourrure: 1 } : { viande: 5, fourrure: 3 },
+      hp: s.hp,
+      maxHp: s.hp,
+      loot: s.loot,
       home,
       target: home.clone(),
       phase: Math.random() * Math.PI * 2,
-      speed: species === "lapin" ? 0.5 + Math.random() * 0.3 : 0.9 + Math.random() * 0.4,
-      wanderRadius: species === "lapin" ? 4 : 8,
+      speed: s.speed,
+      wanderRadius: s.wanderRadius,
       respawnAt: null,
       position,
     };
@@ -255,7 +335,9 @@ export class AnimalWorld {
         pos2.add(toTarget);
       }
       const ground = getHeightAt(pos2.x, pos2.y);
-      const bounce = Math.abs(Math.sin(now * (n.species === "lapin" ? 6 : 3) + n.phase)) * (n.species === "lapin" ? 0.06 : 0.03);
+      const bounceFreq = n.species === "lapin" ? 6 : n.species === "poule" ? 8 : 3;
+      const bounceAmp = n.species === "lapin" ? 0.06 : n.species === "poule" ? 0.035 : 0.03;
+      const bounce = Math.abs(Math.sin(now * bounceFreq + n.phase)) * bounceAmp;
       n.group.position.set(pos2.x, ground + bounce, pos2.y);
       n.position.copy(n.group.position);
     }

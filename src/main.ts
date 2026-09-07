@@ -67,7 +67,7 @@ const grass = createGrass(scene);
 const pond = createPond(scene);
 createDecorations(scene, TERRAIN_SIZE);
 const wildlife = createWildlife(scene);
-const animalWorld = new AnimalWorld(scene, 20, 9);
+const animalWorld = new AnimalWorld(scene, 20, 9, 14);
 
 const resourceWorld = new ResourceWorld(scene, 145, 68);
 

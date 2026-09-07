@@ -11,12 +11,26 @@ export const POND_RADIUS = 15;
 const POND_FLOOR = -3.6;
 export const WATER_LEVEL = -2.1;
 
+// Bande côtière : le bord est de la carte s'aplatit et s'abaisse pour former une vraie plage/rivage,
+// plutôt que le seul pourtour du petit étang.
+export const COAST_START = TERRAIN_SIZE / 2 - 55;
+const COAST_END = TERRAIN_SIZE / 2 - 6;
+
 function baseHeightAt(x: number, z: number): number {
   // Un bruit basse fréquence "déforme" les coordonnées d'un second bruit,
   // ce qui casse la régularité visuelle d'un simple bruit fractal (relief plus naturel).
   const warpX = fractalNoise(x * 0.01, z * 0.01, 2) * 12;
   const warpZ = fractalNoise(x * 0.01 + 50, z * 0.01 + 50, 2) * 12;
-  return fractalNoise((x + warpX) * NOISE_SCALE, (z + warpZ) * NOISE_SCALE, 5) * HEIGHT_SCALE;
+  let h = fractalNoise((x + warpX) * NOISE_SCALE, (z + warpZ) * NOISE_SCALE, 5) * HEIGHT_SCALE;
+
+  const coastT = THREE.MathUtils.smoothstep(x, COAST_START, COAST_END);
+  if (coastT > 0) h = THREE.MathUtils.lerp(h, -3.4, coastT);
+  return h;
+}
+
+/** Climat basse fréquence (-1 froid/neigeux -> 1 chaud/tropical), indépendant du relief. */
+export function getClimateAt(x: number, z: number): number {
+  return fractalNoise(x * 0.0035 + 500, z * 0.0035 - 500, 3);
 }
 
 /** Hauteur du terrain à une position (x, z) donnée — utilisée à la fois pour le maillage et pour poser joueur/objets au sol. */
@@ -54,6 +68,7 @@ export function createTerrain(): THREE.Mesh {
 
   const position = geometry.attributes.position;
   const terrainT: number[] = [];
+  const climateT: number[] = [];
 
   for (let i = 0; i < position.count; i++) {
     const x = position.getX(i);
@@ -61,9 +76,11 @@ export function createTerrain(): THREE.Mesh {
     const h = getHeightAt(x, z);
     position.setY(i, h);
     terrainT.push(getBiomeAt(h));
+    climateT.push(getClimateAt(x, z));
   }
 
   geometry.setAttribute("terrainT", new THREE.Float32BufferAttribute(terrainT, 1));
+  geometry.setAttribute("climateT", new THREE.Float32BufferAttribute(climateT, 1));
   geometry.computeVertexNormals();
 
   const loader = new THREE.TextureLoader();
@@ -97,8 +114,11 @@ export function createTerrain(): THREE.Mesh {
     shader.uniforms.rockRoughnessMap = { value: rockRough };
 
     shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", `attribute float terrainT;\nvarying float vTerrainT;\n#include <common>`)
-      .replace("#include <begin_vertex>", `#include <begin_vertex>\nvTerrainT = terrainT;`);
+      .replace(
+        "#include <common>",
+        `attribute float terrainT;\nattribute float climateT;\nvarying float vTerrainT;\nvarying float vClimateT;\n#include <common>`,
+      )
+      .replace("#include <begin_vertex>", `#include <begin_vertex>\nvTerrainT = terrainT;\nvClimateT = climateT;`);
 
     const blendDecl = `
       uniform sampler2D sandMap;
@@ -108,8 +128,11 @@ export function createTerrain(): THREE.Mesh {
       uniform sampler2D rockNormalMap;
       uniform sampler2D rockRoughnessMap;
       varying float vTerrainT;
+      varying float vClimateT;
       float terrainSandW() { return 1.0 - smoothstep( 0.0, 0.32, vTerrainT ); }
       float terrainRockW() { return smoothstep( 0.58, 0.85, vTerrainT ); }
+      float snowW() { return smoothstep( 0.32, 0.62, vClimateT ) * (1.0 - terrainSandW()); }
+      float tropicalW() { return smoothstep( -0.32, -0.62, vClimateT ); }
     `;
 
     shader.fragmentShader = shader.fragmentShader
@@ -122,6 +145,10 @@ export function createTerrain(): THREE.Mesh {
         vec4 rockColor = texture2D( rockMap, vMapUv );
         vec4 blendedColor = mix( grassColor, sandColor, terrainSandW() );
         blendedColor = mix( blendedColor, rockColor, terrainRockW() );
+        // Neige : recouvre la végétation d'un blanc-bleuté dans les zones froides (pas sur le sable côtier).
+        blendedColor = mix( blendedColor, vec4( 0.88, 0.93, 0.98, 1.0 ), snowW() );
+        // Tropical : verdit et assombrit légèrement pour une jungle plus dense.
+        blendedColor.rgb = mix( blendedColor.rgb, blendedColor.rgb * vec3( 0.65, 1.05, 0.55 ), tropicalW() );
         diffuseColor *= blendedColor;
         `,
       )

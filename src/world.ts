@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { getHeightAt, isUnderwater, TERRAIN_SIZE } from "./terrain";
+import { getClimateAt, getHeightAt, isUnderwater, TERRAIN_SIZE } from "./terrain";
 import type { ResourceType } from "./inventory";
 
 export interface ResourceNode {
@@ -134,8 +134,60 @@ function createBroadleafTree(): THREE.Object3D {
   return group;
 }
 
-function createTree(): THREE.Object3D {
-  const group = Math.random() < 0.55 ? createPineTree() : createBroadleafTree();
+/** Palmier : tronc fin et courbé, bouquet de longues palmes retombantes au sommet. */
+function createPalmTree(): THREE.Object3D {
+  const group = new THREE.Group();
+  const trunkHeight = 3.2 + Math.random() * 1.6;
+  const bendDir = (Math.random() - 0.5) * 0.35;
+
+  const trunkSegments = 8;
+  const trunkPoints: THREE.Vector3[] = [];
+  for (let i = 0; i <= trunkSegments; i++) {
+    const t = i / trunkSegments;
+    trunkPoints.push(new THREE.Vector3(Math.sin(t * Math.PI * 0.5) * bendDir * trunkHeight, t * trunkHeight, 0));
+  }
+  const trunkCurve = new THREE.CatmullRomCurve3(trunkPoints);
+  const trunk = new THREE.Mesh(new THREE.TubeGeometry(trunkCurve, 10, 0.13, 7, false), barkMaterial);
+  trunk.castShadow = true;
+  group.add(trunk);
+
+  const top = trunkPoints[trunkPoints.length - 1];
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x2f7a3a, roughness: 0.85, side: THREE.DoubleSide });
+  const frondCount = 7 + Math.floor(Math.random() * 3);
+  for (let i = 0; i < frondCount; i++) {
+    const angle = (i / frondCount) * Math.PI * 2;
+    const length = 1.4 + Math.random() * 0.5;
+    const frond = new THREE.Mesh(new THREE.ConeGeometry(0.32, length, 1, 5, true), leafMat);
+    frond.position.set(top.x, top.y + 0.15, top.z);
+    frond.rotation.z = Math.PI / 2 + (Math.random() - 0.5) * 0.2;
+    frond.rotation.y = angle;
+    frond.rotation.x = -0.55 - Math.random() * 0.25;
+    frond.castShadow = true;
+    group.add(frond);
+  }
+
+  // Quelques noix de coco groupées sous le bouquet de palmes.
+  const coconutMat = new THREE.MeshStandardMaterial({ color: 0x4a3423, roughness: 0.8 });
+  for (let i = 0; i < 3; i++) {
+    const coco = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6), coconutMat);
+    const a = (i / 3) * Math.PI * 2;
+    coco.position.set(top.x + Math.cos(a) * 0.12, top.y - 0.05, top.z + Math.sin(a) * 0.12);
+    group.add(coco);
+  }
+
+  return group;
+}
+
+function createTree(x: number, z: number): THREE.Object3D {
+  const climate = getClimateAt(x, z);
+  let group: THREE.Object3D;
+  if (climate < -0.32) {
+    group = createPineTree();
+  } else if (climate > 0.32) {
+    group = createPalmTree();
+  } else {
+    group = Math.random() < 0.55 ? createPineTree() : createBroadleafTree();
+  }
   const scale = 0.85 + Math.random() * 0.4;
   group.scale.setScalar(scale);
   group.rotation.y = Math.random() * Math.PI * 2;
@@ -191,9 +243,9 @@ export class ResourceWorld {
     return new THREE.Vector3(x, getHeightAt(x, z), z);
   }
 
-  private spawnNode(type: ResourceType, factory: () => THREE.Object3D, hp: number) {
+  private spawnNode(type: ResourceType, factory: (x: number, z: number) => THREE.Object3D, hp: number) {
     const position = this.randomGroundPoint();
-    const mesh = factory();
+    const mesh = factory(position.x, position.z);
     mesh.position.copy(position);
     mesh.rotation.y = Math.random() * Math.PI * 2;
     this.scene.add(mesh);
