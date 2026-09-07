@@ -42,11 +42,20 @@
         background: rgba(20,20,24,0.92); color: #fff; padding: 20px; border-radius: 10px;
         min-width: 260px; display: none;
       }
-      #craft-menu h2 { margin: 0 0 12px; font-size: 16px; }
+      #craft-menu h2, #inventory-menu h2 { margin: 0 0 12px; font-size: 16px; }
       .recipe-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid #333; }
       .recipe-row button { background: #3b5f8a; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
       .recipe-row button:disabled { background: #444; color: #888; cursor: not-allowed; }
       .recipe-cost { font-size: 12px; color: #aaa; }
+      #craft-notice { display: none; background: rgba(180,60,40,0.85); color: #fff; padding: 6px 10px; border-radius: 4px; font-size: 12px; margin-bottom: 10px; }
+
+      #inventory-menu {
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        background: rgba(20,20,24,0.92); color: #fff; padding: 20px; border-radius: 10px;
+        min-width: 280px; display: none;
+      }
+      .inv-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid #333; font-size: 14px; }
+      #inventory-menu h3 { font-size: 13px; color: #aaa; margin: 14px 0 6px; text-transform: uppercase; letter-spacing: 0.05em; }
 
       #instructions {
         position: absolute; inset: 0; background: rgba(10,10,14,0.85); color: #fff;
@@ -71,17 +80,27 @@
       <div id="build-indicator"></div>
       <div id="craft-menu">
         <h2>Artisanat</h2>
+        <p id="craft-notice">Approchez-vous d'un établi pour fabriquer des outils</p>
         <div id="recipe-list"></div>
         <p style="font-size:12px;color:#888;margin-top:10px;">Appuyez sur C pour fermer</p>
+      </div>
+      <div id="inventory-menu">
+        <h2>Inventaire</h2>
+        <h3>Ressources</h3>
+        <div id="inventory-resource-list"></div>
+        <h3>Objets fabriqués</h3>
+        <div id="inventory-item-list"></div>
+        <p style="font-size:12px;color:#888;margin-top:10px;">Appuyez sur I pour fermer</p>
       </div>
       <div id="instructions">
         <b>Survie Monde Ouvert</b>
         <ul>
           <li>Clique pour capturer la souris et jouer</li>
           <li>ZQSD / WASD — se déplacer · Souris — regarder · Espace — sauter</li>
-          <li>E — récolter une ressource proche</li>
-          <li>C — ouvrir l'artisanat</li>
-          <li>B — mode construction · clic gauche — poser · Tab — changer de pièce</li>
+          <li>E — récolter une ressource ou chasser un animal proche</li>
+          <li>I — ouvrir l'inventaire</li>
+          <li>C — ouvrir l'artisanat (nécessite un établi à proximité)</li>
+          <li>B — mode construction · clic gauche — poser · Tab — changer de pièce (fondation/mur/établi)</li>
           <li>Échap — relâcher la souris</li>
         </ul>
         <p id="loading-status">Chargement du personnage…</p>

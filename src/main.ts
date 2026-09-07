@@ -74,14 +74,24 @@ const resourceWorld = new ResourceWorld(scene, 145, 68);
 const inventory = new Inventory();
 const buildingSystem = new BuildingSystem(scene, inventory);
 
-const ui = new UI(inventory, (id) => {
-  if (inventory.craft(RECIPES.find((r) => r.id === id)!)) {
-    equip(id);
-  }
-});
-
 let equippedMesh: THREE.Object3D | null = null;
 let player: Player;
+
+const WORKBENCH_RANGE = 3.5;
+function isNearWorkbench(): boolean {
+  if (!player) return false;
+  return buildingSystem.workbenchPositions.some((p) => p.distanceTo(player.position) < WORKBENCH_RANGE);
+}
+
+const ui = new UI(inventory, {
+  canCraftHere: isNearWorkbench,
+  onCraft: (id) => {
+    if (inventory.craft(RECIPES.find((r) => r.id === id)!)) {
+      equip(id);
+    }
+  },
+  onEquip: (id) => equip(id),
+});
 
 function equip(id: ItemId) {
   if (!player) return;
@@ -110,7 +120,7 @@ let isPointerLocked = false;
 const canvas = renderer.domElement;
 
 canvas.addEventListener("click", () => {
-  if (ui.isCraftMenuOpen()) return;
+  if (ui.isCraftMenuOpen() || ui.isInventoryMenuOpen()) return;
   if (!isPointerLocked) canvas.requestPointerLock();
 });
 
@@ -138,6 +148,9 @@ document.addEventListener("keydown", (e) => {
   if (e.code === "KeyC") {
     const opened = ui.toggleCraftMenu();
     if (opened) document.exitPointerLock();
+  } else if (e.code === "KeyI") {
+    const opened = ui.toggleInventoryMenu();
+    if (opened) document.exitPointerLock();
   } else if (e.code === "KeyB") {
     buildingSystem.toggle();
   } else if (e.code === "Tab") {
@@ -150,6 +163,7 @@ document.addEventListener("keydown", (e) => {
     if (player?.onGround) player.velocityY = 5.2;
   } else if (e.code === "Escape") {
     ui.closeCraftMenu();
+    ui.closeInventoryMenu();
   }
 });
 
@@ -291,6 +305,9 @@ async function main() {
   player = await Player.load();
   player.position.set(0, getHeightAt(0, 0), 0);
   scene.add(player.root);
+
+  // Établi de départ, pour pouvoir fabriquer dès le début sans avoir à en construire un.
+  buildingSystem.placeStarterWorkbench(new THREE.Vector3(2, getHeightAt(2, 2), 2));
 
   ui.setLoading(false);
   ui.onStart(() => {

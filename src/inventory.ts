@@ -18,6 +18,7 @@ export const RECIPES: Recipe[] = [
 export const BUILD_COSTS = {
   fondation: { bois: 5 },
   mur: { bois: 4 },
+  etabli: { bois: 8, pierre: 3 },
 } as const;
 export type BuildPieceType = keyof typeof BUILD_COSTS;
 
