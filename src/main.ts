@@ -14,6 +14,7 @@ import { createPond } from "./water";
 import { createDecorations } from "./decorations";
 import { createWildlife } from "./wildlife";
 import { AnimalWorld } from "./animals";
+import { createFlowers } from "./flowers";
 
 // --- Scène / rendu ---
 const scene = new THREE.Scene();
@@ -66,8 +67,9 @@ scene.add(terrain);
 const grass = createGrass(scene);
 const pond = createPond(scene);
 createDecorations(scene, TERRAIN_SIZE);
+createFlowers(scene);
 const wildlife = createWildlife(scene);
-const animalWorld = new AnimalWorld(scene, 20, 9, 14);
+const animalWorld = new AnimalWorld(scene, 20, 9, 14, 6);
 
 const resourceWorld = new ResourceWorld(scene, 145, 68);
 
@@ -300,6 +302,7 @@ function animate() {
 
   composer.render();
 }
+
 
 async function main() {
   player = await Player.load();

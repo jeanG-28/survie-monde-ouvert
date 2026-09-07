@@ -1,10 +1,12 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { getHeightAt, isUnderwater, TERRAIN_SIZE } from "./terrain";
 
-export type Species = "lapin" | "cerf" | "poule";
+export type Species = "lapin" | "cerf" | "poule" | "renard";
 
 export interface AnimalNode {
-  group: THREE.Group;
+  group: THREE.Group | THREE.Object3D;
   species: Species;
   hp: number;
   maxHp: number;
@@ -16,6 +18,46 @@ export interface AnimalNode {
   wanderRadius: number;
   respawnAt: number | null;
   position: THREE.Vector3;
+  mixer?: THREE.AnimationMixer;
+  idleAction?: THREE.AnimationAction;
+  walkAction?: THREE.AnimationAction;
+  walkWeight?: number;
+  footOffset?: number;
+}
+
+interface FoxTemplate {
+  scene: THREE.Object3D;
+  idleClip: THREE.AnimationClip;
+  walkClip: THREE.AnimationClip;
+}
+
+let foxTemplate: FoxTemplate | null = null;
+let foxTemplateLoading: Promise<FoxTemplate> | null = null;
+
+/** Charge une seule fois le vrai modèle de renard (maillage + animations Survey/Walk), réutilisé pour chaque instance via un clone de squelette. */
+function loadFoxTemplate(): Promise<FoxTemplate> {
+  if (foxTemplate) return Promise.resolve(foxTemplate);
+  if (foxTemplateLoading) return foxTemplateLoading;
+
+  foxTemplateLoading = new GLTFLoader().loadAsync("/models/Fox.glb").then((gltf) => {
+    const scene = gltf.scene;
+    const box = new THREE.Box3().setFromObject(scene);
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    const scale = size.y > 0 ? 0.5 / size.y : 1;
+    scene.scale.setScalar(scale);
+    const box2 = new THREE.Box3().setFromObject(scene);
+    scene.position.y -= box2.min.y;
+    scene.traverse((o) => {
+      if (o instanceof THREE.Mesh) o.castShadow = true;
+    });
+
+    const idleClip = gltf.animations.find((a) => a.name === "Survey") ?? gltf.animations[0];
+    const walkClip = gltf.animations.find((a) => a.name === "Walk") ?? gltf.animations[0];
+    foxTemplate = { scene, idleClip, walkClip };
+    return foxTemplate;
+  });
+  return foxTemplateLoading;
 }
 
 function randomGroundPoint(half: number): THREE.Vector2 {
@@ -241,11 +283,17 @@ export class AnimalWorld {
   readonly nodes: AnimalNode[] = [];
   private scene: THREE.Scene;
 
-  constructor(scene: THREE.Scene, rabbitCount = 14, deerCount = 6, chickenCount = 8) {
+  constructor(scene: THREE.Scene, rabbitCount = 14, deerCount = 6, chickenCount = 8, foxCount = 5) {
     this.scene = scene;
     for (let i = 0; i < rabbitCount; i++) this.spawn("lapin");
     for (let i = 0; i < deerCount; i++) this.spawn("cerf");
     for (let i = 0; i < chickenCount; i++) this.spawn("poule");
+
+    // Le renard utilise un vrai modèle 3D téléchargé (maillage + animations) : chargement asynchrone,
+    // les instances sont ajoutées dès que le modèle de base est prêt.
+    loadFoxTemplate().then((template) => {
+      for (let i = 0; i < foxCount; i++) this.spawnFox(template);
+    });
   }
 
   private spawn(species: Species) {
@@ -261,6 +309,7 @@ export class AnimalWorld {
       lapin: { hp: 20, loot: { viande: 2, fourrure: 1 }, speed: 0.5 + Math.random() * 0.3, wanderRadius: 4 },
       cerf: { hp: 60, loot: { viande: 5, fourrure: 3 }, speed: 0.9 + Math.random() * 0.4, wanderRadius: 8 },
       poule: { hp: 12, loot: { viande: 1, fourrure: 0 }, speed: 0.4 + Math.random() * 0.25, wanderRadius: 2.5 },
+      renard: { hp: 30, loot: { viande: 2, fourrure: 4 }, speed: 0.7 + Math.random() * 0.3, wanderRadius: 6 },
     };
     const s = stats[species];
 
@@ -277,6 +326,46 @@ export class AnimalWorld {
       wanderRadius: s.wanderRadius,
       respawnAt: null,
       position,
+    };
+    this.nodes.push(node);
+  }
+
+  private spawnFox(template: FoxTemplate) {
+    const half = TERRAIN_SIZE / 2 - 10;
+    const home = randomGroundPoint(half);
+    const group = cloneSkeleton(template.scene) as THREE.Group;
+    // Le clone hérite du décalage vertical du gabarit (pieds ramenés à l'origine locale) : on le
+    // conserve au lieu d'écraser toute la position, sinon le renard se retrouve sous terre.
+    const footOffset = group.position.y;
+    const position = new THREE.Vector3(home.x, getHeightAt(home.x, home.y), home.y);
+    group.position.set(position.x, position.y + footOffset, position.z);
+    this.scene.add(group);
+
+    const mixer = new THREE.AnimationMixer(group);
+    const idleAction = mixer.clipAction(template.idleClip);
+    const walkAction = mixer.clipAction(template.walkClip);
+    idleAction.play();
+    walkAction.play();
+    walkAction.setEffectiveWeight(0);
+
+    const node: AnimalNode = {
+      group,
+      species: "renard",
+      hp: 30,
+      maxHp: 30,
+      loot: { viande: 2, fourrure: 4 },
+      home,
+      target: home.clone(),
+      phase: Math.random() * Math.PI * 2,
+      speed: 0.7 + Math.random() * 0.3,
+      wanderRadius: 6,
+      respawnAt: null,
+      position,
+      footOffset,
+      mixer,
+      idleAction,
+      walkAction,
+      walkWeight: 0,
     };
     this.nodes.push(node);
   }
@@ -327,18 +416,30 @@ export class AnimalWorld {
 
       const pos2 = new THREE.Vector2(n.group.position.x, n.group.position.z);
       const toTarget = n.target.clone().sub(pos2);
+      let isMoving = false;
       if (toTarget.length() < 0.15) {
         if (Math.random() < 0.01) this.pickNewTarget(n);
       } else {
+        isMoving = true;
         n.group.rotation.y = Math.atan2(toTarget.x, toTarget.y);
         toTarget.normalize().multiplyScalar(n.speed * dt);
         pos2.add(toTarget);
       }
       const ground = getHeightAt(pos2.x, pos2.y);
-      const bounceFreq = n.species === "lapin" ? 6 : n.species === "poule" ? 8 : 3;
-      const bounceAmp = n.species === "lapin" ? 0.06 : n.species === "poule" ? 0.035 : 0.03;
-      const bounce = Math.abs(Math.sin(now * bounceFreq + n.phase)) * bounceAmp;
-      n.group.position.set(pos2.x, ground + bounce, pos2.y);
+
+      if (n.mixer && n.walkAction && n.idleAction) {
+        // Vrai modèle animé (renard) : fondu enchaîné entre l'animation d'immobilité et de marche.
+        n.walkWeight = THREE.MathUtils.damp(n.walkWeight ?? 0, isMoving ? 1 : 0, 8, dt);
+        n.walkAction.setEffectiveWeight(n.walkWeight);
+        n.idleAction.setEffectiveWeight(1 - n.walkWeight);
+        n.mixer.update(dt);
+        n.group.position.set(pos2.x, ground + (n.footOffset ?? 0), pos2.y);
+      } else {
+        const bounceFreq = n.species === "lapin" ? 6 : n.species === "poule" ? 8 : 3;
+        const bounceAmp = n.species === "lapin" ? 0.06 : n.species === "poule" ? 0.035 : 0.03;
+        const bounce = Math.abs(Math.sin(now * bounceFreq + n.phase)) * bounceAmp;
+        n.group.position.set(pos2.x, ground + bounce, pos2.y);
+      }
       n.position.copy(n.group.position);
     }
   }
