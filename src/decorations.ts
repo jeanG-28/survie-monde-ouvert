@@ -1,9 +1,12 @@
 import * as THREE from "three";
 import { getClimateAt, getHeightAt, isUnderwater, POND_CENTER, POND_RADIUS, WATER_LEVEL } from "./terrain";
+import { loadNatureAssets, pickClone } from "./natureAssets";
 
 const REED_COUNT = 500;
 const LILY_COUNT = 22;
 const BUSH_COUNT = 90;
+const MUSHROOM_COUNT = 45;
+const STUMP_COUNT = 20;
 
 function createReedTexture(): THREE.Texture {
   const canvas = document.createElement("canvas");
@@ -79,57 +82,40 @@ function createLilyPads(scene: THREE.Scene) {
   }
 }
 
-function createBushes(scene: THREE.Scene, terrainSize: number) {
-  const material = new THREE.MeshStandardMaterial({ color: 0x3d6b2f, roughness: 0.9, flatShading: true });
-  const berryMaterial = new THREE.MeshStandardMaterial({ color: 0x9c1c3a, roughness: 0.4 });
+/** Buissons, champignons et souches : vrais modèles bas-poly (Kenney Nature Kit, CC0). */
+function createGroundClutter(scene: THREE.Scene, terrainSize: number) {
   const half = terrainSize / 2 - 6;
-  let placed = 0;
-  let attempts = 0;
-  while (placed < BUSH_COUNT && attempts < BUSH_COUNT * 4) {
-    attempts++;
-    const x = (Math.random() - 0.5) * 2 * half;
-    const z = (Math.random() - 0.5) * 2 * half;
-    if (isUnderwater(x, z)) continue;
-    if (getClimateAt(x, z) < -0.32) continue; // pas de buissons à baies sous la neige
-    const h = getHeightAt(x, z);
 
-    const group = new THREE.Group();
-    const clumps = 2 + Math.floor(Math.random() * 2);
-    for (let i = 0; i < clumps; i++) {
-      const geometry = new THREE.IcosahedronGeometry(0.28 + Math.random() * 0.15, 0);
-      const pos = geometry.attributes.position;
-      const v = new THREE.Vector3();
-      for (let j = 0; j < pos.count; j++) {
-        v.fromBufferAttribute(pos, j);
-        v.multiplyScalar(1 + (Math.random() - 0.5) * 0.3);
-        pos.setXYZ(j, v.x, v.y, v.z);
-      }
-      geometry.computeVertexNormals();
-      const clump = new THREE.Mesh(geometry, material);
-      clump.position.set((Math.random() - 0.5) * 0.3, 0.22 + Math.random() * 0.08, (Math.random() - 0.5) * 0.3);
-      clump.castShadow = true;
-      group.add(clump);
+  function scatter(count: number, pick: () => THREE.Object3D, scaleRange: [number, number], skipSnow: boolean) {
+    let placed = 0;
+    let attempts = 0;
+    while (placed < count && attempts < count * 4) {
+      attempts++;
+      const x = (Math.random() - 0.5) * 2 * half;
+      const z = (Math.random() - 0.5) * 2 * half;
+      if (isUnderwater(x, z)) continue;
+      if (skipSnow && getClimateAt(x, z) < -0.32) continue;
+      const h = getHeightAt(x, z);
 
-      if (Math.random() < 0.3) {
-        for (let b = 0; b < 3 + Math.floor(Math.random() * 4); b++) {
-          const berry = new THREE.Mesh(new THREE.SphereGeometry(0.03, 5, 5), berryMaterial);
-          const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
-          berry.position.copy(clump.position).addScaledVector(dir, 0.25);
-          group.add(berry);
-        }
-      }
+      const object = pick();
+      object.position.set(x, h, z);
+      object.rotation.y = Math.random() * Math.PI * 2;
+      const scale = scaleRange[0] + Math.random() * (scaleRange[1] - scaleRange[0]);
+      object.scale.setScalar(scale);
+      scene.add(object);
+      placed++;
     }
-    group.position.set(x, h, z);
-    group.rotation.y = Math.random() * Math.PI * 2;
-    const scale = 0.8 + Math.random() * 0.6;
-    group.scale.setScalar(scale);
-    scene.add(group);
-    placed++;
   }
+
+  loadNatureAssets().then((assets) => {
+    scatter(BUSH_COUNT, () => pickClone(assets.bushes), [1.0, 1.8], true);
+    scatter(MUSHROOM_COUNT, () => pickClone(assets.mushrooms), [0.8, 1.4], false);
+    scatter(STUMP_COUNT, () => pickClone(assets.stumps), [0.9, 1.3], false);
+  });
 }
 
 export function createDecorations(scene: THREE.Scene, terrainSize: number) {
   createReeds(scene);
   createLilyPads(scene);
-  createBushes(scene, terrainSize);
+  createGroundClutter(scene, terrainSize);
 }

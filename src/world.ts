@@ -1,6 +1,8 @@
 import * as THREE from "three";
 import { getClimateAt, getHeightAt, isUnderwater, TERRAIN_SIZE } from "./terrain";
 import type { ResourceType } from "./inventory";
+import { loadNatureAssets, pickClone } from "./natureAssets";
+import type { NatureAssets } from "./natureAssets";
 
 export interface ResourceNode {
   mesh: THREE.Object3D;
@@ -11,215 +13,6 @@ export interface ResourceNode {
   position: THREE.Vector3;
 }
 
-const textureLoader = new THREE.TextureLoader();
-const rockDiffuse = textureLoader.load("/textures/rock/diff.jpg");
-const rockNormal = textureLoader.load("/textures/rock/nor.jpg");
-const rockRoughness = textureLoader.load("/textures/rock/rough.jpg");
-rockDiffuse.colorSpace = THREE.SRGBColorSpace;
-const rockMaterial = new THREE.MeshStandardMaterial({
-  map: rockDiffuse,
-  normalMap: rockNormal,
-  roughnessMap: rockRoughness,
-  roughness: 1,
-});
-
-function loadTiledTexture(url: string, repeatX: number, repeatY: number, srgb: boolean): THREE.Texture {
-  const tex = textureLoader.load(url);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(repeatX, repeatY);
-  if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
-
-const barkMaterial = new THREE.MeshStandardMaterial({
-  map: loadTiledTexture("/textures/bark/diff.jpg", 2, 1, true),
-  normalMap: loadTiledTexture("/textures/bark/nor.jpg", 2, 1, false),
-  roughnessMap: loadTiledTexture("/textures/bark/rough.jpg", 2, 1, false),
-  roughness: 1,
-});
-
-/** Icosaèdre aux sommets déplacés aléatoirement — sert de base organique (rocher, touffe de feuillage). */
-function createJitteredBlob(radius: number, detail: number, jitterAmount: number): THREE.BufferGeometry {
-  const geometry = new THREE.IcosahedronGeometry(radius, detail);
-  const pos = geometry.attributes.position;
-  const v = new THREE.Vector3();
-  for (let i = 0; i < pos.count; i++) {
-    v.fromBufferAttribute(pos, i);
-    v.multiplyScalar(1 + (Math.random() - 0.5) * jitterAmount);
-    pos.setXYZ(i, v.x, v.y, v.z);
-  }
-  geometry.computeVertexNormals();
-  return geometry;
-}
-
-function randomLeafMaterial(lightness = 0): THREE.MeshStandardMaterial {
-  const leafColor = new THREE.Color(0x2e5c2a).offsetHSL(
-    (Math.random() - 0.5) * 0.04,
-    (Math.random() - 0.5) * 0.1,
-    (Math.random() - 0.5) * 0.1 + lightness,
-  );
-  return new THREE.MeshStandardMaterial({ color: leafColor, roughness: 0.9, flatShading: true });
-}
-
-/** Deux teintes de feuillage (clair/sombre) pour un houppier moucheté plutôt qu'une couleur plate. */
-function createLeafPalette(): [THREE.MeshStandardMaterial, THREE.MeshStandardMaterial] {
-  return [randomLeafMaterial(-0.04), randomLeafMaterial(0.05)];
-}
-
-/** Conifère : plusieurs étages de cônes décalés. */
-function createPineTree(): THREE.Object3D {
-  const group = new THREE.Group();
-  const trunkHeight = 1.5 + Math.random() * 0.6;
-
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.25, trunkHeight, 10, 3), barkMaterial);
-  trunk.position.y = trunkHeight / 2;
-  trunk.castShadow = true;
-  group.add(trunk);
-
-  const [leafDark, leafLight] = createLeafPalette();
-  const tiers = 6;
-  for (let i = 0; i < tiers; i++) {
-    const t = i / (tiers - 1);
-    const radius = THREE.MathUtils.lerp(1.2, 0.28, t);
-    const height = THREE.MathUtils.lerp(1.05, 0.75, t);
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(radius, height, 12, 2), i % 2 === 0 ? leafDark : leafLight);
-    cone.position.y = trunkHeight + t * 0.75 + height / 2 - 0.2;
-    cone.rotation.y = Math.random() * Math.PI;
-    cone.castShadow = true;
-    group.add(cone);
-  }
-  return group;
-}
-
-/** Feuillu : houppier fait de plusieurs touffes organiques regroupées. */
-function createBroadleafTree(): THREE.Object3D {
-  const group = new THREE.Group();
-  const trunkHeight = 1.3 + Math.random() * 0.7;
-
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.23, trunkHeight, 10, 3), barkMaterial);
-  trunk.position.y = trunkHeight / 2;
-  trunk.castShadow = true;
-  group.add(trunk);
-
-  // Quelques racines/branches basses pour casser la silhouette cylindrique du tronc.
-  for (let i = 0; i < 2; i++) {
-    const branch = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.06, 0.4, 6), barkMaterial);
-    const angle = Math.random() * Math.PI * 2;
-    branch.position.set(Math.cos(angle) * 0.12, trunkHeight * (0.55 + Math.random() * 0.2), Math.sin(angle) * 0.12);
-    branch.rotation.z = Math.PI / 2.4;
-    branch.rotation.y = angle;
-    branch.castShadow = true;
-    group.add(branch);
-  }
-
-  const [leafDark, leafLight] = createLeafPalette();
-  const canopyCenter = trunkHeight + 0.6;
-  const blobCount = 7 + Math.floor(Math.random() * 3);
-  for (let i = 0; i < blobCount; i++) {
-    const angle = (i / blobCount) * Math.PI * 2 + Math.random() * 0.6;
-    const dist = 0.32 + Math.random() * 0.38;
-    const blobRadius = 0.5 + Math.random() * 0.35;
-    const blob = new THREE.Mesh(createJitteredBlob(blobRadius, 2, 0.3), Math.random() < 0.5 ? leafDark : leafLight);
-    blob.position.set(Math.cos(angle) * dist, canopyCenter + (Math.random() - 0.5) * 0.5, Math.sin(angle) * dist);
-    blob.castShadow = true;
-    group.add(blob);
-  }
-  // Touffe centrale pour combler le sommet.
-  const topBlob = new THREE.Mesh(createJitteredBlob(0.7, 2, 0.28), leafLight);
-  topBlob.position.y = canopyCenter + 0.5;
-  topBlob.castShadow = true;
-  group.add(topBlob);
-
-  return group;
-}
-
-/** Palmier : tronc fin et courbé, bouquet de longues palmes retombantes au sommet. */
-function createPalmTree(): THREE.Object3D {
-  const group = new THREE.Group();
-  const trunkHeight = 3.2 + Math.random() * 1.6;
-  const bendDir = (Math.random() - 0.5) * 0.35;
-
-  const trunkSegments = 8;
-  const trunkPoints: THREE.Vector3[] = [];
-  for (let i = 0; i <= trunkSegments; i++) {
-    const t = i / trunkSegments;
-    trunkPoints.push(new THREE.Vector3(Math.sin(t * Math.PI * 0.5) * bendDir * trunkHeight, t * trunkHeight, 0));
-  }
-  const trunkCurve = new THREE.CatmullRomCurve3(trunkPoints);
-  const trunk = new THREE.Mesh(new THREE.TubeGeometry(trunkCurve, 10, 0.13, 7, false), barkMaterial);
-  trunk.castShadow = true;
-  group.add(trunk);
-
-  const top = trunkPoints[trunkPoints.length - 1];
-  const leafMat = new THREE.MeshStandardMaterial({ color: 0x2f7a3a, roughness: 0.85, side: THREE.DoubleSide });
-  const frondCount = 7 + Math.floor(Math.random() * 3);
-  for (let i = 0; i < frondCount; i++) {
-    const angle = (i / frondCount) * Math.PI * 2;
-    const length = 1.4 + Math.random() * 0.5;
-    const frond = new THREE.Mesh(new THREE.ConeGeometry(0.32, length, 1, 5, true), leafMat);
-    frond.position.set(top.x, top.y + 0.15, top.z);
-    frond.rotation.z = Math.PI / 2 + (Math.random() - 0.5) * 0.2;
-    frond.rotation.y = angle;
-    frond.rotation.x = -0.55 - Math.random() * 0.25;
-    frond.castShadow = true;
-    group.add(frond);
-  }
-
-  // Quelques noix de coco groupées sous le bouquet de palmes.
-  const coconutMat = new THREE.MeshStandardMaterial({ color: 0x4a3423, roughness: 0.8 });
-  for (let i = 0; i < 3; i++) {
-    const coco = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6), coconutMat);
-    const a = (i / 3) * Math.PI * 2;
-    coco.position.set(top.x + Math.cos(a) * 0.12, top.y - 0.05, top.z + Math.sin(a) * 0.12);
-    group.add(coco);
-  }
-
-  return group;
-}
-
-function createTree(x: number, z: number): THREE.Object3D {
-  const climate = getClimateAt(x, z);
-  let group: THREE.Object3D;
-  if (climate < -0.32) {
-    group = createPineTree();
-  } else if (climate > 0.32) {
-    group = createPalmTree();
-  } else {
-    group = Math.random() < 0.55 ? createPineTree() : createBroadleafTree();
-  }
-  const scale = 0.85 + Math.random() * 0.4;
-  group.scale.setScalar(scale);
-  group.rotation.y = Math.random() * Math.PI * 2;
-  group.traverse((o) => {
-    if (o instanceof THREE.Mesh) o.castShadow = true;
-  });
-  return group;
-}
-
-function createRock(): THREE.Object3D {
-  const group = new THREE.Group();
-  const main = new THREE.Mesh(createJitteredBlob(0.55, 2, 0.32), rockMaterial);
-  main.scale.set(1 + Math.random() * 0.4, 0.55 + Math.random() * 0.3, 1 + Math.random() * 0.4);
-  main.castShadow = true;
-  group.add(main);
-
-  // Petits éclats autour du bloc principal pour casser la silhouette d'un simple blob.
-  const shardCount = 1 + Math.floor(Math.random() * 3);
-  for (let i = 0; i < shardCount; i++) {
-    const shard = new THREE.Mesh(createJitteredBlob(0.14 + Math.random() * 0.12, 1, 0.35), rockMaterial);
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 0.35 + Math.random() * 0.25;
-    shard.position.set(Math.cos(angle) * dist, -0.05 + Math.random() * 0.1, Math.sin(angle) * dist);
-    shard.rotation.y = Math.random() * Math.PI * 2;
-    shard.castShadow = true;
-    group.add(shard);
-  }
-
-  group.rotation.y = Math.random() * Math.PI * 2;
-  return group;
-}
-
 const RESPAWN_SECONDS = 30;
 
 export class ResourceWorld {
@@ -228,8 +21,12 @@ export class ResourceWorld {
 
   constructor(scene: THREE.Scene, treeCount = 95, rockCount = 45) {
     this.scene = scene;
-    for (let i = 0; i < treeCount; i++) this.spawnNode("bois", createTree, 30);
-    for (let i = 0; i < rockCount; i++) this.spawnNode("pierre", createRock, 20);
+
+    // Vrais modèles 3D bas-poly (Kenney Nature Kit, CC0) : chargés une fois, puis clonés par instance.
+    loadNatureAssets().then((assets) => {
+      for (let i = 0; i < treeCount; i++) this.spawnTree(assets);
+      for (let i = 0; i < rockCount; i++) this.spawnRock(assets);
+    });
   }
 
   private randomGroundPoint(): THREE.Vector3 {
@@ -243,13 +40,26 @@ export class ResourceWorld {
     return new THREE.Vector3(x, getHeightAt(x, z), z);
   }
 
-  private spawnNode(type: ResourceType, factory: (x: number, z: number) => THREE.Object3D, hp: number) {
+  private spawnTree(assets: NatureAssets) {
     const position = this.randomGroundPoint();
-    const mesh = factory(position.x, position.z);
+    const climate = getClimateAt(position.x, position.z);
+    const pool = climate < -0.32 ? assets.coldTrees : climate > 0.32 ? assets.hotTrees : assets.temperateTrees;
+    const mesh = pickClone(pool);
     mesh.position.copy(position);
     mesh.rotation.y = Math.random() * Math.PI * 2;
+    mesh.scale.setScalar(1.8 + Math.random() * 1.0);
     this.scene.add(mesh);
-    this.nodes.push({ mesh, type, hp, maxHp: hp, respawnAt: null, position });
+    this.nodes.push({ mesh, type: "bois", hp: 30, maxHp: 30, respawnAt: null, position });
+  }
+
+  private spawnRock(assets: NatureAssets) {
+    const position = this.randomGroundPoint();
+    const mesh = pickClone(assets.rocks);
+    mesh.position.copy(position);
+    mesh.rotation.y = Math.random() * Math.PI * 2;
+    mesh.scale.setScalar(0.8 + Math.random() * 0.8);
+    this.scene.add(mesh);
+    this.nodes.push({ mesh, type: "pierre", hp: 20, maxHp: 20, respawnAt: null, position });
   }
 
   /** Renvoie le nœud de ressource le plus proche à portée d'interaction, ou null. */
