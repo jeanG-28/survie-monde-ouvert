@@ -128,7 +128,7 @@ function createButterflies(scene: THREE.Scene, count: number): Updatable {
 function createFish(): { group: THREE.Group; tail: THREE.Mesh } {
   const group = new THREE.Group();
   const hue = 190 + Math.random() * 40;
-  const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(`hsl(${hue}, 55%, 45%)`), roughness: 0.5, metalness: 0.1 });
+  const mat = new THREE.MeshStandardMaterial({ color: new THREE.Color(`hsl(${hue}, 75%, 58%)`), roughness: 0.45, metalness: 0.15 });
   const bellyMat = new THREE.MeshStandardMaterial({ color: 0xe8e4d0, roughness: 0.5 });
 
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.1, 3, 8), mat);
@@ -153,7 +153,28 @@ function createFish(): { group: THREE.Group; tail: THREE.Mesh } {
   group.traverse((o) => {
     if (o instanceof THREE.Mesh) o.castShadow = false;
   });
+  group.scale.setScalar(2.4);
   return { group, tail };
+}
+
+// Un point est jugé sûr pour un poisson seulement s'il est nettement sous l'eau (pas juste au bord) :
+// le bassin de l'étang ne devient profond que près de son centre exact (dégradé progressif), donc un
+// simple rayon ne suffit pas à garantir que le poisson reste immergé — il faut vérifier chaque point.
+function isDeepWater(x: number, z: number): boolean {
+  return getHeightAt(x, z) < WATER_LEVEL - 0.6;
+}
+
+function pickFishCenter(inCoast: boolean): THREE.Vector2 {
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const candidate = inCoast
+      ? new THREE.Vector2(COAST_START + 20 + Math.random() * 10, (Math.random() - 0.5) * (TERRAIN_SIZE - 40))
+      : new THREE.Vector2(POND_CENTER.x, POND_CENTER.y).add(
+          new THREE.Vector2(Math.random() - 0.5, Math.random() - 0.5).multiplyScalar((POND_RADIUS - 8) * 2),
+        );
+    if (isDeepWater(candidate.x, candidate.y)) return candidate;
+  }
+  // Repli garanti sûr : centre exact de l'étang, toujours le point le plus profond.
+  return new THREE.Vector2(POND_CENTER.x, POND_CENTER.y);
 }
 
 function createFishSchool(scene: THREE.Scene, count: number): Updatable {
@@ -162,11 +183,10 @@ function createFishSchool(scene: THREE.Scene, count: number): Updatable {
   for (let i = 0; i < count; i++) {
     const { group, tail } = createFish();
     const inCoast = Math.random() < 0.4;
-    const center = inCoast
-      ? new THREE.Vector2(COAST_START + 15 + Math.random() * 15, (Math.random() - 0.5) * (TERRAIN_SIZE - 40))
-      : new THREE.Vector2(POND_CENTER.x, POND_CENTER.y);
-    const radius = inCoast ? 4 + Math.random() * 6 : Math.random() * (POND_RADIUS - 4);
-    const depth = 0.3 + Math.random() * 0.9;
+    const center = pickFishCenter(inCoast);
+    // Rayon de nage local volontairement modeste pour ne pas s'éloigner du point validé sous l'eau.
+    const radius = 1 + Math.random() * 2;
+    const depth = 0.15 + Math.random() * 0.35;
     const speed = 0.3 + Math.random() * 0.4;
     const phase = Math.random() * Math.PI * 2;
     scene.add(group);

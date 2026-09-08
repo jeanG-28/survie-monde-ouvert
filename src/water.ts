@@ -7,7 +7,7 @@ function makeWater(geometry: THREE.BufferGeometry): Water {
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.RepeatWrapping;
   });
-  return new Water(geometry, {
+  const water = new Water(geometry, {
     textureWidth: 512,
     textureHeight: 512,
     waterNormals,
@@ -15,8 +15,16 @@ function makeWater(geometry: THREE.BufferGeometry): Water {
     sunColor: 0xfff1d6,
     waterColor: 0x0e3b4d,
     distortionScale: 2.2,
+    alpha: 0.85,
     fog: true,
   });
+  // Water.js calcule un alpha dans son shader mais n'active jamais le blending sur son matériau :
+  // sans ce réglage, l'eau reste 100% opaque quoi qu'on passe en option, et les poissons ne se
+  // voient jamais dessous. On l'active nous-mêmes pour qu'ils soient visibles sous la surface.
+  const material = water.material as THREE.ShaderMaterial;
+  material.transparent = true;
+  material.depthWrite = false;
+  return water;
 }
 
 export function createPond(scene: THREE.Scene): { update: (dt: number) => void } {
